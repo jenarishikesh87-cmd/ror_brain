@@ -1,13 +1,12 @@
 import os
-import requests
 from flask import Flask, request
 import telebot
 from gtts import gTTS
 
 TOKEN = os.getenv("BOT_TOKEN")
-bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
+bot = telebot.TeleBot(TOKEN)
 
 def ror_personality(user_text):
     return f"Analyzing your input: {user_text}. Stay strategic. Stay aware."
@@ -19,12 +18,6 @@ def handle_text(message):
 
 @bot.message_handler(content_types=['voice'])
 def handle_voice(message):
-    file_info = bot.get_file(message.voice.file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    
-    with open("voice.ogg", "wb") as f:
-        f.write(downloaded_file)
-
     response_text = "Voice received. Processing your thoughts."
     tts = gTTS(response_text)
     tts.save("response.mp3")
@@ -44,4 +37,5 @@ def index():
     return "ROR Brain Online"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
