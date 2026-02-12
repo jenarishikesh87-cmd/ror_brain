@@ -10,26 +10,33 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
+# Memory storage
 conversation_memory = []
+
+
 def ror_personality(user_text):
+    global conversation_memory
+
+    # Add user message to memory
+    conversation_memory.append({
+        "role": "user",
+        "content": user_text
+    })
+
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    global conversation_memory
-
-conversation_memory.append({"role": "user", "content": user_text})
-
-data = {
-    "model": "openai/gpt-3.5-turbo",
-    "messages": [
-        {
-            "role": "system",
-            "content": "You are ROR (Reality of Rishi). You are strategic, sharp, slightly bold, emotionally intelligent, and help Rishi make powerful decisions."
-        }
-    ] + conversation_memory
-}
+    data = {
+        "model": "openai/gpt-3.5-turbo",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are ROR (Reality of Rishi). You are strategic, sharp, emotionally intelligent, slightly bold, and guide Rishi to make powerful decisions."
+            }
+        ] + conversation_memory
+    }
 
     response = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -39,8 +46,14 @@ data = {
 
     result = response.json()
     reply_text = result["choices"][0]["message"]["content"]
-conversation_memory.append({"role": "assistant", "content": reply_text})
-return reply_text
+
+    # Add assistant reply to memory
+    conversation_memory.append({
+        "role": "assistant",
+        "content": reply_text
+    })
+
+    return reply_text
 
 
 @bot.message_handler(content_types=['text'])
@@ -65,7 +78,7 @@ def webhook():
     json_string = request.get_data().decode("utf-8")
     update = telebot.types.Update.de_json(json_string)
     bot.process_new_updates([update])
-    return "!", 200
+    return "OK", 200
 
 
 @app.route("/")
