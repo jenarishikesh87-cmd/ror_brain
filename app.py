@@ -10,25 +10,26 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
+conversation_memory = []
 def ror_personality(user_text):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    data = {
-        "model": "openai/gpt-3.5-turbo",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are ROR (Reality of Rishi). You are intelligent, strategic, slightly bold, calm, and emotionally aware. You guide Rishi but respect his final decision."
-            },
-            {
-                "role": "user",
-                "content": user_text
-            }
-        ]
-    }
+    global conversation_memory
+
+conversation_memory.append({"role": "user", "content": user_text})
+
+data = {
+    "model": "openai/gpt-3.5-turbo",
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are ROR (Reality of Rishi). You are strategic, sharp, slightly bold, emotionally intelligent, and help Rishi make powerful decisions."
+        }
+    ] + conversation_memory
+}
 
     response = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -37,7 +38,9 @@ def ror_personality(user_text):
     )
 
     result = response.json()
-    return result["choices"][0]["message"]["content"]
+    reply_text = result["choices"][0]["message"]["content"]
+conversation_memory.append({"role": "assistant", "content": reply_text})
+return reply_text
 
 
 @bot.message_handler(content_types=['text'])
