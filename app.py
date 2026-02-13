@@ -186,15 +186,6 @@ def webhook():
 def index():
     return "ROR Brain Running with Permanent Memory"
 
-
-# ================================
-# START SERVER
-# ================================
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)        return "ROR encountered an error."
-
 # ================================
 # START SERVER
 # ================================
