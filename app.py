@@ -11,91 +11,62 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
-# ---------------- DATABASE SETUP ----------------
+# ==============================
+# DATABASE SETUP
+# ==============================
 
-conn = sqlite3.connect("ror_memory.db", check_same_thread=False)
+conn = sqlite3.connect("memory.db", check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS memory (
+CREATE TABLE IF NOT EXISTS memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT,
     content TEXT
 )
 """)
 conn.commit()
 
-# ---------------- MEMORY FUNCTIONS ----------------
 
-def save_memory(category, content):
-    cursor.execute(
-        "INSERT INTO memory (category, content) VALUES (?, ?)",
-        (category, content)
-    )
+# ==============================
+# MEMORY FUNCTIONS
+# ==============================
+
+def save_memory(text):
+    cursor.execute("INSERT INTO memories (content) VALUES (?)", (text,))
     conn.commit()
 
-def get_relevant_memory(limit=10):
-    cursor.execute(
-        "SELECT category, content FROM memory ORDER BY id DESC LIMIT ?",
-        (limit,)
-    )
+def get_memories():
+    cursor.execute("SELECT content FROM memories")
     rows = cursor.fetchall()
-    rows.reverse()
-    return "\n".join([f"{r[0]}: {r[1]}" for r in rows])
+    return [row[0] for row in rows]
 
-# ---------------- AI MEMORY CLASSIFIER ----------------
 
-def classify_memory(user_text):
+# ==============================
+# IMPORTANCE DETECTION
+# ==============================
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
+def is_important(text):
+    keywords = [
+        "i am", "i'm", "i like", "i love", "i hate",
+        "i want", "my goal", "i feel", "i think",
+        "i prefer", "i get", "i struggle"
+    ]
+    text_lower = text.lower()
+    return any(keyword in text_lower for keyword in keywords)
 
-    data = {
-        "model": "openai/gpt-3.5-turbo",
-        "messages": [
-            {
-                "role": "system",
-                "content": """
-You are a memory classifier for ROR.
-Decide if the user's message contains important personal information.
-If yes, categorize it strictly as one of:
-Identity, Ambition, Emotion, Preference, Project.
-If not important, respond: Ignore.
-Only return the category name or Ignore.
-"""
-            },
-            {
-                "role": "user",
-                "content": user_text
-            }
-        ]
-    }
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=data
-    )
-
-    result = response.json()
-    category = result["choices"][0]["message"]["content"].strip()
-
-    return category
-
-# ---------------- ROR PERSONALITY ENGINE ----------------
+# ==============================
+# AI CORE FUNCTION
+# ==============================
 
 def ror_personality(user_text):
 
-    # Step 1: Classify memory
-    category = classify_memory(user_text)
+    # Save important memories automatically
+    if is_important(user_text):
+        save_memory(user_text)
 
-    if category != "Ignore":
-        save_memory(category, user_text)
-
-    # Step 2: Retrieve past memory
-    memory_context = get_relevant_memory()
+    memory_list = get_memories()
+    memory_text = "\n".join(memory_list)
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -109,13 +80,13 @@ def ror_personality(user_text):
                 "role": "system",
                 "content": f"""
 You are ROR (Reality of Rishi).
-You are strategic, intelligent, emotionally balanced, and slightly confident.
+You are strategic, intelligent, calm, slightly confident with attitude.
+You guide Rishi toward growth and clarity.
 
-Here is what you know about Rishi:
-{memory_context}
+Here is what you remember about Rishi:
+{memory_text}
 
-Use this memory naturally in your response.
-Guide him wisely.
+Use this knowledge naturally in conversation.
 """
             },
             {
@@ -132,11 +103,12 @@ Guide him wisely.
     )
 
     result = response.json()
-    reply_text = result["choices"][0]["message"]["content"]
+    return result["choices"][0]["message"]["content"]
 
-    return reply_text
 
-# ---------------- HANDLERS ----------------
+# ==============================
+# TELEGRAM HANDLERS
+# ==============================
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
@@ -145,7 +117,7 @@ def handle_text(message):
 
 @bot.message_handler(content_types=['voice'])
 def handle_voice(message):
-    reply_text = ror_personality("User sent a voice message. Respond intelligently.")
+    reply_text = ror_personality("User sent a voice message. Respond wisely.")
 
     tts = gTTS(reply_text)
     tts.save("response.mp3")
@@ -153,20 +125,21 @@ def handle_voice(message):
     with open("response.mp3", "rb") as audio:
         bot.send_voice(message.chat.id, audio)
 
-# ---------------- WEBHOOK ----------------
+
+# ==============================
+# WEBHOOK + FLASK
+# ==============================
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     json_string = request.get_data().decode("utf-8")
     update = telebot.types.Update.de_json(json_string)
     bot.process_new_updates([update])
-    return "OK", 200
+    return "!", 200
 
 @app.route("/")
 def index():
-    return "ROR Brain Online - Intelligent Memory Active"
-
-# ---------------- RUN ----------------
+    return "ROR Brain Online"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
