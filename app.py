@@ -1,20 +1,25 @@
 import os
 import requests
+from flask import Flask, request
 import telebot
-from gtts import gTTS
+
+# ===============================
+# ENV VARIABLES
+# ===============================
 
 TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
-# =========================
-# MEMORY FUNCTIONS
-# =========================
+# ===============================
+# SUPABASE MEMORY
+# ===============================
 
-def save_memory(user_text):
+def save_memory(user_text, category):
     url = f"{SUPABASE_URL}/rest/v1/memory"
     headers = {
         "apikey": SUPABASE_KEY,
@@ -25,7 +30,7 @@ def save_memory(user_text):
 
     data = {
         "user_id": "rishi",
-        "category": "personal",
+        "category": category,
         "content": user_text
     }
 
@@ -43,16 +48,16 @@ def load_memory():
 
     if response.status_code == 200:
         memories = response.json()
-        return "\n".join([m["content"] for m in memories])
+        return "\n".join([f"{m['category']}: {m['content']}" for m in memories])
 
     return ""
 
 
-# =========================
-# AI RESPONSE
-# =========================
+# ===============================
+# AI ENGINE
+# ===============================
 
-def ror_response(user_text):
+def ror_brain(user_text):
 
     memory_context = load_memory()
 
@@ -70,10 +75,17 @@ def ror_response(user_text):
 You are ROR (Reality of Rishi).
 You are strategic, intelligent, slightly confident.
 
-You remember important facts about Rishi.
-
-Here is what you remember:
+Here is what you know about Rishi:
 {memory_context}
+
+When responding:
+1. Choose a category for this message from:
+personal, goals, music, career, business, emotional
+2. Respond normally.
+
+Format:
+CATEGORY: <category>
+REPLY: <actual reply>
 """
             },
             {
@@ -90,37 +102,51 @@ Here is what you remember:
     )
 
     result = response.json()
-    reply = result["choices"][0]["message"]["content"]
+    output = result["choices"][0]["message"]["content"]
 
-    save_memory(user_text)
+    try:
+        category = output.split("CATEGORY:")[1].split("\n")[0].strip()
+        reply = output.split("REPLY:")[1].strip()
+    except:
+        category = "personal"
+        reply = output
+
+    save_memory(user_text, category)
 
     return reply
 
 
-# =========================
-# TELEGRAM HANDLERS
-# =========================
+# ===============================
+# TELEGRAM HANDLER
+# ===============================
 
-@bot.message_handler(content_types=['text'])
-def handle_text(message):
-    reply = ror_response(message.text)
-    bot.send_message(message.chat.id, reply)
-
-
-@bot.message_handler(content_types=['voice'])
-def handle_voice(message):
-    reply_text = ror_response("User sent a voice message.")
-
-    tts = gTTS(reply_text)
-    tts.save("response.mp3")
-
-    with open("response.mp3", "rb") as audio:
-        bot.send_voice(message.chat.id, audio)
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    reply = ror_brain(message.text)
+    bot.reply_to(message, reply)
 
 
-# =========================
-# START BOT (POLLING MODE)
-# =========================
+# ===============================
+# WEBHOOK ROUTE
+# ===============================
 
-print("ROR Brain running...")
-bot.infinity_polling()
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    json_string = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "OK", 200
+
+
+@app.route("/")
+def index():
+    return "ROR Brain Running with Permanent Memory"
+
+
+# ===============================
+# START SERVER
+# ===============================
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
