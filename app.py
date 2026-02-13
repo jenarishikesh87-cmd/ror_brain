@@ -1,23 +1,26 @@
 import os
 import requests
-from flask import Flask, request
 import telebot
 from gtts import gTTS
+
+# ===============================
+# ENV VARIABLES
+# ===============================
 
 TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
-# =========================
-# SUPABASE MEMORY
-# =========================
+# ===============================
+# SUPABASE MEMORY FUNCTIONS
+# ===============================
 
 def save_memory(user_text):
     url = f"{SUPABASE_URL}/rest/v1/memory"
+
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -35,7 +38,8 @@ def save_memory(user_text):
 
 
 def load_memory():
-    url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at.desc"
+    url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at.asc"
+
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -49,11 +53,13 @@ def load_memory():
 
     return ""
 
-# =========================
+
+# ===============================
 # AI PERSONALITY
-# =========================
+# ===============================
 
 def ror_personality(user_text):
+
     memory_context = load_memory()
 
     headers = {
@@ -68,6 +74,7 @@ def ror_personality(user_text):
                 "role": "system",
                 "content": f"""
 You are ROR (Reality of Rishi).
+
 You are strategic, intelligent, slightly confident with attitude.
 You remember important facts about Rishi.
 
@@ -89,15 +96,17 @@ Here is what you remember:
     )
 
     result = response.json()
+
     reply_text = result["choices"][0]["message"]["content"]
 
     save_memory(user_text)
 
     return reply_text
 
-# =========================
+
+# ===============================
 # TELEGRAM HANDLERS
-# =========================
+# ===============================
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
@@ -115,26 +124,11 @@ def handle_voice(message):
     with open("response.mp3", "rb") as audio:
         bot.send_voice(message.chat.id, audio)
 
-# =========================
-# WEBHOOK
-# =========================
 
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    json_string = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return "", 200
-
-
-@app.route("/")
-def index():
-    return "ROR Brain Online with Memory"
-
-# =========================
-# RUN
-# =========================
+# ===============================
+# START BOT (POLLING MODE)
+# ===============================
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    print("ROR Brain running in polling mode...")
+    bot.infinity_polling()
