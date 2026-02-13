@@ -195,41 +195,9 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)        return "ROR encountered an error."
 
-# ==============================
-# TELEGRAM HANDLER
-# ==============================
-
-@bot.message_handler(content_types=['text'])
-def handle_text(message):
-    try:
-        reply = ror_brain(message.text)
-        bot.send_message(message.chat.id, reply)
-    except Exception as e:
-        print("Telegram Error:", e)
-        bot.send_message(message.chat.id, "ROR crashed.")
-
-# ==============================
-# WEBHOOK ROUTE
-# ==============================
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    try:
-        json_string = request.get_data().decode("utf-8")
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return "OK", 200
-    except Exception as e:
-        print("Webhook Error:", e)
-        return "Error", 400
-
-@app.route("/")
-def index():
-    return "ROR Brain Running with Permanent Memory"
-
-# ==============================
+# ================================
 # START SERVER
-# ==============================
+# ================================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
