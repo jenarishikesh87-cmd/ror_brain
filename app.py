@@ -3,10 +3,6 @@ import requests
 import telebot
 from gtts import gTTS
 
-# ===============================
-# ENV VARIABLES
-# ===============================
-
 TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -14,13 +10,12 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 bot = telebot.TeleBot(TOKEN)
 
-# ===============================
-# SUPABASE MEMORY FUNCTIONS
-# ===============================
+# =========================
+# MEMORY FUNCTIONS
+# =========================
 
 def save_memory(user_text):
     url = f"{SUPABASE_URL}/rest/v1/memory"
-
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -38,8 +33,7 @@ def save_memory(user_text):
 
 
 def load_memory():
-    url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at.asc"
-
+    url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -54,11 +48,11 @@ def load_memory():
     return ""
 
 
-# ===============================
-# AI PERSONALITY
-# ===============================
+# =========================
+# AI RESPONSE
+# =========================
 
-def ror_personality(user_text):
+def ror_response(user_text):
 
     memory_context = load_memory()
 
@@ -74,8 +68,8 @@ def ror_personality(user_text):
                 "role": "system",
                 "content": f"""
 You are ROR (Reality of Rishi).
+You are strategic, intelligent, slightly confident.
 
-You are strategic, intelligent, slightly confident with attitude.
 You remember important facts about Rishi.
 
 Here is what you remember:
@@ -96,27 +90,26 @@ Here is what you remember:
     )
 
     result = response.json()
-
-    reply_text = result["choices"][0]["message"]["content"]
+    reply = result["choices"][0]["message"]["content"]
 
     save_memory(user_text)
 
-    return reply_text
+    return reply
 
 
-# ===============================
+# =========================
 # TELEGRAM HANDLERS
-# ===============================
+# =========================
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
-    reply = ror_personality(message.text)
+    reply = ror_response(message.text)
     bot.send_message(message.chat.id, reply)
 
 
 @bot.message_handler(content_types=['voice'])
 def handle_voice(message):
-    reply_text = ror_personality("User sent a voice message.")
+    reply_text = ror_response("User sent a voice message.")
 
     tts = gTTS(reply_text)
     tts.save("response.mp3")
@@ -125,10 +118,9 @@ def handle_voice(message):
         bot.send_voice(message.chat.id, audio)
 
 
-# ===============================
+# =========================
 # START BOT (POLLING MODE)
-# ===============================
+# =========================
 
-if __name__ == "__main__":
-    print("ROR Brain running in polling mode...")
-    bot.infinity_polling()
+print("ROR Brain running...")
+bot.infinity_polling()
