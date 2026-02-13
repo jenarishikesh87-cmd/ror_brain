@@ -12,9 +12,9 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
-# -----------------------------
-# SUPABASE MEMORY FUNCTIONS
-# -----------------------------
+# =========================
+# SUPABASE MEMORY
+# =========================
 
 def save_memory(user_text):
     url = f"{SUPABASE_URL}/rest/v1/memory"
@@ -35,25 +35,25 @@ def save_memory(user_text):
 
 
 def load_memory():
-    url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at.desc&limit=10"
+    url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at.desc"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
     }
 
     response = requests.get(url, headers=headers)
+
     if response.status_code == 200:
         memories = response.json()
         return "\n".join([m["content"] for m in memories])
+
     return ""
 
-
-# -----------------------------
+# =========================
 # AI PERSONALITY
-# -----------------------------
+# =========================
 
 def ror_personality(user_text):
-
     memory_context = load_memory()
 
     headers = {
@@ -95,10 +95,9 @@ Here is what you remember:
 
     return reply_text
 
-
-# -----------------------------
+# =========================
 # TELEGRAM HANDLERS
-# -----------------------------
+# =========================
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
@@ -109,59 +108,32 @@ def handle_text(message):
 @bot.message_handler(content_types=['voice'])
 def handle_voice(message):
     reply_text = ror_personality("User sent a voice message.")
+
     tts = gTTS(reply_text)
     tts.save("response.mp3")
 
     with open("response.mp3", "rb") as audio:
         bot.send_voice(message.chat.id, audio)
 
+# =========================
+# WEBHOOK
+# =========================
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     json_string = request.get_data().decode("utf-8")
     update = telebot.types.Update.de_json(json_string)
     bot.process_new_updates([update])
-    return "!", 200
+    return "", 200
 
 
 @app.route("/")
 def index():
     return "ROR Brain Online with Memory"
 
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-@bot.message_handler(content_types=['text'])
-def handle_text(message):
-    reply = ror_personality(message.text)
-    bot.send_message(message.chat.id, reply)
-
-@bot.message_handler(content_types=['voice'])
-def handle_voice(message):
-    reply_text = ror_personality("User sent a voice message. Respond wisely.")
-
-    tts = gTTS(reply_text)
-    tts.save("response.mp3")
-
-    with open("response.mp3", "rb") as audio:
-        bot.send_voice(message.chat.id, audio)
-
-
-# ==============================
-# WEBHOOK + FLASK
-# ==============================
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    json_string = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return "!", 200
-
-@app.route("/")
-def index():
-    return "ROR Brain Online"
+# =========================
+# RUN
+# =========================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
