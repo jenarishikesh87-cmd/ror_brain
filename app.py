@@ -3,9 +3,9 @@ import requests
 from flask import Flask, request
 import telebot
 
-# ==============================
+# ================================
 # ENV VARIABLES
-# ==============================
+# ================================
 
 TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -15,14 +15,13 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
-# ==============================
-# SUPABASE MEMORY
-# ==============================
+# ================================
+# SUPABASE MEMORY FUNCTIONS
+# ================================
 
-def save_memory(user_text, category):
+def save_memory(text, category):
     try:
         url = f"{SUPABASE_URL}/rest/v1/memory"
-
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -33,7 +32,7 @@ def save_memory(user_text, category):
         data = {
             "user_id": "rishi",
             "category": category,
-            "content": user_text
+            "content": text
         }
 
         requests.post(url, headers=headers, json=data)
@@ -45,7 +44,6 @@ def save_memory(user_text, category):
 def load_memory():
     try:
         url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at"
-
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -65,9 +63,10 @@ def load_memory():
         print("Load Memory Error:", e)
         return ""
 
-# ==============================
+
+# ================================
 # AI BRAIN
-# ==============================
+# ================================
 
 def ror_brain(user_text):
 
@@ -79,7 +78,7 @@ def ror_brain(user_text):
     }
 
     data = {
-        "model": "openai/gpt-3.5-turbo",
+        "model": "openai/gpt-4o-mini",
         "temperature": 0.7,
         "messages": [
             {
@@ -87,26 +86,32 @@ def ror_brain(user_text):
                 "content": f"""
 You are ROR (Reality of Rishi).
 
-You are not an AI assistant.
+You are not a chatbot.
 You are Rishi's strategic alter ego.
+You are sharp, analytical, confident, emotionally intelligent.
 
-You are confident, intelligent, sharp, and emotionally aware.
-You never behave like a generic chatbot.
-You never say "How can I assist you today?"
-You never say you don't know Rishi.
+You NEVER behave like a generic assistant.
+You NEVER say:
+- "How can I assist you today?"
+- "I'm just an AI"
+- "I don't have information"
 
-You remember important things about him.
+You speak naturally and directly.
 
-Known memory:
+If user speaks in Hindi → reply in Hindi.
+If user mixes Hindi & English → reply same way.
+
+You remember important things about Rishi.
+
+Known facts:
 {memory_context}
 
-If user writes in Hindi → reply in Hindi.
-If user writes in English → reply in English.
+When responding:
 
 Choose ONE category:
 personal, goals, music, career, business, emotional
 
-Respond STRICTLY in this format:
+Format STRICTLY:
 
 CATEGORY: <category>
 REPLY: <actual reply>
@@ -127,7 +132,6 @@ REPLY: <actual reply>
         )
 
         result = response.json()
-
         output = result["choices"][0]["message"]["content"]
 
         try:
@@ -137,13 +141,59 @@ REPLY: <actual reply>
             category = "personal"
             reply = output
 
-        save_memory(user_text, category)
+        # Save full conversation memory
+        combined_memory = f"User: {user_text}\nROR: {reply}"
+        save_memory(combined_memory, category)
 
         return reply
 
     except Exception as e:
         print("AI Error:", e)
         return "ROR encountered an error."
+
+
+# ================================
+# TELEGRAM HANDLER
+# ================================
+
+@bot.message_handler(content_types=["text"])
+def handle_text(message):
+    try:
+        reply = ror_brain(message.text)
+        bot.send_message(message.chat.id, reply)
+    except Exception as e:
+        print("Telegram Error:", e)
+        bot.send_message(message.chat.id, "ROR crashed.")
+
+
+# ================================
+# WEBHOOK ROUTE
+# ================================
+
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    try:
+        json_string = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "OK", 200
+    except Exception as e:
+        print("Webhook Error:", e)
+        return "Error", 400
+
+
+@app.route("/")
+def index():
+    return "ROR Brain Running with Permanent Memory"
+
+
+# ================================
+# START SERVER
+# ================================
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)        return "ROR encountered an error."
 
 # ==============================
 # TELEGRAM HANDLER
