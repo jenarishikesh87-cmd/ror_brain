@@ -77,21 +77,31 @@ def ror_brain(user_text):
 
     data = {
         "model": "openai/gpt-3.5-turbo",
+        "temperature": 0.7,
         "messages": [
             {
                 "role": "system",
                 "content": f"""
 You are ROR (Reality of Rishi).
-You are strategic, intelligent, slightly confident.
 
-Here is what you know about Rishi:
+You are not a chatbot.
+You are his strategic alter ego.
+
+You remember everything important about him.
+You speak confidently.
+You never act like a generic assistant.
+You never say "How can I assist you today?"
+You never reset personality.
+
+Known data about Rishi:
 {memory_context}
 
-When responding:
-1. Choose category from:
-personal, goals, music, career, business, emotional
-2. Format exactly:
+Respond naturally and intelligently.
 
+Choose one category:
+personal, goals, music, career, business, emotional
+
+Format strictly:
 CATEGORY: <category>
 REPLY: <actual reply>
 """
@@ -103,31 +113,26 @@ REPLY: <actual reply>
         ]
     }
 
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=data
+    )
+
+    result = response.json()
+    output = result["choices"][0]["message"]["content"]
+
     try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data
-        )
+        category = output.split("CATEGORY:")[1].split("\n")[0].strip()
+        reply = output.split("REPLY:")[1].strip()
+    except:
+        category = "personal"
+        reply = output
 
-        result = response.json()
-        output = result["choices"][0]["message"]["content"]
+    save_memory(user_text, category)
 
-        # Extract category and reply
-        try:
-            category = output.split("CATEGORY:")[1].split("\n")[0].strip()
-            reply = output.split("REPLY:")[1].strip()
-        except:
-            category = "personal"
-            reply = output
+    return reply
 
-        save_memory(user_text, category)
-
-        return reply
-
-    except Exception as e:
-        print("AI Error:", e)
-        return "ROR encountered an error."
 
 
 # ===============================
