@@ -16,45 +16,54 @@ app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
 # ===============================
-# SUPABASE MEMORY
+# SUPABASE MEMORY FUNCTIONS
 # ===============================
 
 def save_memory(user_text, category):
-    url = f"{SUPABASE_URL}/rest/v1/memory"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-    }
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/memory"
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
 
-    data = {
-        "user_id": "rishi",
-        "category": category,
-        "content": user_text
-    }
+        data = {
+            "user_id": "rishi",
+            "category": category,
+            "content": user_text
+        }
 
-    requests.post(url, headers=headers, json=data)
+        requests.post(url, headers=headers, json=data)
+    except Exception as e:
+        print("Save Memory Error:", e)
 
 
 def load_memory():
-    url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}"
-    }
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at"
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }
 
-    response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers)
 
-    if response.status_code == 200:
-        memories = response.json()
-        return "\n".join([f"{m['category']}: {m['content']}" for m in memories])
+        if response.status_code == 200:
+            memories = response.json()
+            return "\n".join(
+                [f"{m['category']}: {m['content']}" for m in memories]
+            )
 
-    return ""
+        return ""
+    except Exception as e:
+        print("Load Memory Error:", e)
+        return ""
 
 
 # ===============================
-# AI ENGINE
+# AI BRAIN
 # ===============================
 
 def ror_brain(user_text):
@@ -79,11 +88,10 @@ Here is what you know about Rishi:
 {memory_context}
 
 When responding:
-1. Choose a category for this message from:
+1. Choose category from:
 personal, goals, music, career, business, emotional
-2. Respond normally.
+2. Format exactly:
 
-Format:
 CATEGORY: <category>
 REPLY: <actual reply>
 """
@@ -95,35 +103,45 @@ REPLY: <actual reply>
         ]
     }
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=data
-    )
-
-    result = response.json()
-    output = result["choices"][0]["message"]["content"]
-
     try:
-        category = output.split("CATEGORY:")[1].split("\n")[0].strip()
-        reply = output.split("REPLY:")[1].strip()
-    except:
-        category = "personal"
-        reply = output
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data
+        )
 
-    save_memory(user_text, category)
+        result = response.json()
+        output = result["choices"][0]["message"]["content"]
 
-    return reply
+        # Extract category and reply
+        try:
+            category = output.split("CATEGORY:")[1].split("\n")[0].strip()
+            reply = output.split("REPLY:")[1].strip()
+        except:
+            category = "personal"
+            reply = output
+
+        save_memory(user_text, category)
+
+        return reply
+
+    except Exception as e:
+        print("AI Error:", e)
+        return "ROR encountered an error."
 
 
 # ===============================
 # TELEGRAM HANDLER
 # ===============================
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    reply = ror_brain(message.text)
-    bot.reply_to(message, reply)
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+    try:
+        reply = ror_brain(message.text)
+        bot.send_message(message.chat.id, reply)
+    except Exception as e:
+        print("Telegram Error:", e)
+        bot.send_message(message.chat.id, "ROR crashed.")
 
 
 # ===============================
@@ -132,10 +150,14 @@ def handle_message(message):
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    json_string = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return "OK", 200
+    try:
+        json_string = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "OK", 200
+    except Exception as e:
+        print("Webhook Error:", e)
+        return "Error", 400
 
 
 @app.route("/")
@@ -148,5 +170,8 @@ def index():
 # ===============================
 
 if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://ror-brain.onrender.com/{TOKEN}")
+
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
