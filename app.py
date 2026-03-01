@@ -1,13 +1,12 @@
 import os
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-
-# ---------------- MEMORY (temporary in RAM for now) ----------------
+# ---------------- MEMORY (temporary RAM) ----------------
 memory_store = []
 
 def load_memory():
@@ -15,7 +14,6 @@ def load_memory():
 
 def save_memory(text, category):
     memory_store.append(f"[{category}] {text}")
-
 
 # ---------------- ROR BRAIN ----------------
 def ror_brain(user_text):
@@ -80,22 +78,18 @@ REPLY: <actual reply>
 
     return reply
 
+# ---------------- ROUTES ----------------
 
-# ---------------- API ROUTE ----------------
+@app.route("/")
+def shell():
+    return render_template("index.html")
+
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
     user_text = data.get("message")
-
     reply = ror_brain(user_text)
-
     return jsonify({"reply": reply})
-
-
-@app.route("/")
-def home():
-    return "ROR is running."
-
 
 # ---------------- START SERVER ----------------
 if __name__ == "__main__":
