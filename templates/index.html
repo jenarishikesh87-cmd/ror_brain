@@ -1,46 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ROR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body {
+            margin: 0;
+            background: #0d0d0d;
+            font-family: Arial, sans-serif;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #chat {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 10px 14px;
+            margin: 6px 0;
+            border-radius: 14px;
+            font-size: 14px;
+        }
+
+        .user {
+            align-self: flex-end;
+            background: #1f1f1f;
+        }
+
+        .ror {
+            align-self: flex-start;
+            background: #262626;
+        }
+
+        .input-bar {
+            display: flex;
+            padding: 10px;
+            background: #111;
+            border-top: 1px solid #222;
+        }
+
+        input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 20px;
+            border: none;
+            outline: none;
+            background: #1f1f1f;
+            color: white;
+        }
+
+        button {
+            margin-left: 8px;
+            padding: 10px 14px;
+            border-radius: 20px;
+            border: none;
+            background: #333;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="chat"></div>
+
+<div class="input-bar">
+    <input type="text" id="message" placeholder="Speak or type...">
+    <button onclick="startVoice()">🎤</button>
+    <button onclick="sendMessage()">Send</button>
+</div>
+
 <script>
 
-let recognition = null;
-let isListening = false;
+async function sendMessage() {
+    const input = document.getElementById("message");
+    const text = input.value.trim();
+    if (!text) return;
 
-function toggleListening() {
-
-    const micBtn = document.getElementById("micBtn");
-
-    if (!('webkitSpeechRecognition' in window)) {
-        alert("Voice not supported in this browser");
-        return;
-    }
-
-    if (isListening) {
-        recognition.stop();
-        isListening = false;
-        micBtn.classList.remove("active");
-        return;
-    }
-
-    recognition = new webkitSpeechRecognition();
-    recognition.lang = "en-IN";
-    recognition.continuous = false;   // ❌ removed always-on
-    recognition.interimResults = false;
-
-    recognition.onresult = function(event) {
-        const transcript = event.results[0][0].transcript;
-        addMessage(transcript, "user");
-        sendToServer(transcript);
-    };
-
-    recognition.onend = function() {
-        isListening = false;
-        micBtn.classList.remove("active");
-    };
-
-    recognition.start();
-    isListening = true;
-    micBtn.classList.add("active");
-}
-
-async function sendToServer(text) {
+    addMessage(text, "user");
+    input.value = "";
 
     const response = await fetch("/chat", {
         method: "POST",
@@ -53,33 +101,57 @@ async function sendToServer(text) {
     speak(data.reply);
 }
 
-async function sendMessage() {
-    const input = document.getElementById("message");
-    const text = input.value.trim();
-    if (!text) return;
-
-    addMessage(text, "user");
-    input.value = "";
-    sendToServer(text);
-}
-
 function addMessage(text, sender) {
     const chat = document.getElementById("chat");
     const msg = document.createElement("div");
-    msg.classList.add("message", sender);
+    msg.className = "message " + sender;
     msg.innerText = text;
     chat.appendChild(msg);
     chat.scrollTop = chat.scrollHeight;
 }
 
-function speak(text) {
+function startVoice() {
 
+    if (!('webkitSpeechRecognition' in window)) {
+        alert("Voice not supported");
+        return;
+    }
+
+    const recognition = new webkitSpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        addMessage(transcript, "user");
+        sendMessageFromVoice(transcript);
+    };
+
+    recognition.start();
+}
+
+async function sendMessageFromVoice(text) {
+
+    const response = await fetch("/chat", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({message: text})
+    });
+
+    const data = await response.json();
+    addMessage(data.reply, "ror");
+    speak(data.reply);
+}
+
+function speak(text) {
     const speech = new SpeechSynthesisUtterance(text);
     speech.lang = "en-IN";
     speech.rate = 0.95;
-    speech.pitch = 1;
-
     window.speechSynthesis.speak(speech);
 }
 
-        </script>
+</script>
+
+</body>
+</html>
