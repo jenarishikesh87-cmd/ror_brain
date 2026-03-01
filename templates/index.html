@@ -60,8 +60,8 @@
         }
 
         button {
-            margin-left: 10px;
-            padding: 10px 16px;
+            margin-left: 8px;
+            padding: 10px 14px;
             border-radius: 20px;
             border: none;
             background: #333;
@@ -69,8 +69,8 @@
             cursor: pointer;
         }
 
-        button:hover {
-            background: #444;
+        .active {
+            background: #8b0000 !important;
         }
     </style>
 </head>
@@ -80,18 +80,54 @@
 <div class="chat-container" id="chat"></div>
 
 <div class="input-bar">
-    <input type="text" id="message" placeholder="Type...">
+    <input type="text" id="message" placeholder="Speak or type...">
+    <button onclick="toggleListening()" id="micBtn">🎤</button>
     <button onclick="sendMessage()">Send</button>
 </div>
 
 <script>
-async function sendMessage() {
-    const input = document.getElementById("message");
-    const text = input.value.trim();
-    if (!text) return;
 
-    addMessage(text, "user");
-    input.value = "";
+let recognition;
+let listening = false;
+
+function toggleListening() {
+    const micBtn = document.getElementById("micBtn");
+
+    if (!('webkitSpeechRecognition' in window)) {
+        alert("Voice not supported in this browser");
+        return;
+    }
+
+    if (!listening) {
+        recognition = new webkitSpeechRecognition();
+        recognition.lang = "en-IN";
+        recognition.continuous = true;
+        recognition.interimResults = false;
+
+        recognition.onresult = function(event) {
+            const transcript = event.results[event.results.length - 1][0].transcript;
+            addMessage(transcript, "user");
+            sendToServer(transcript);
+        };
+
+        recognition.onend = function() {
+            if (listening) {
+                recognition.start(); // auto restart
+            }
+        };
+
+        recognition.start();
+        listening = true;
+        micBtn.classList.add("active");
+
+    } else {
+        recognition.stop();
+        listening = false;
+        micBtn.classList.remove("active");
+    }
+}
+
+async function sendToServer(text) {
 
     const response = await fetch("/chat", {
         method: "POST",
@@ -101,6 +137,17 @@ async function sendMessage() {
 
     const data = await response.json();
     addMessage(data.reply, "ror");
+    speak(data.reply);
+}
+
+async function sendMessage() {
+    const input = document.getElementById("message");
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage(text, "user");
+    input.value = "";
+    sendToServer(text);
 }
 
 function addMessage(text, sender) {
@@ -111,6 +158,15 @@ function addMessage(text, sender) {
     chat.appendChild(msg);
     chat.scrollTop = chat.scrollHeight;
 }
+
+function speak(text) {
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.lang = "en-IN";
+    speech.rate = 1;
+    speech.pitch = 1;
+    window.speechSynthesis.speak(speech);
+}
+
 </script>
 
 </body>
