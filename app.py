@@ -16,12 +16,13 @@ app = Flask(__name__)
 bot = telebot.TeleBot(TOKEN)
 
 # ================================
-# SUPABASE MEMORY FUNCTIONS
+# SUPABASE MEMORY
 # ================================
 
 def save_memory(text, category):
     try:
         url = f"{SUPABASE_URL}/rest/v1/memory"
+
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -44,6 +45,7 @@ def save_memory(text, category):
 def load_memory():
     try:
         url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at"
+
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -115,6 +117,12 @@ Format STRICTLY:
 
 CATEGORY: <category>
 REPLY: <actual reply>
+
+If the user gives short replies like:
+"hn", "hmm", "ok", "kuch nahi", "good night",
+do NOT ask another follow-up question.
+Reply briefly and end confidently.
+Never repeat the same question twice.
 """
             },
             {
@@ -132,6 +140,15 @@ REPLY: <actual reply>
         )
 
         result = response.json()
+
+        # SAFETY CHECK
+        if "choices" not in result:
+            print("OpenRouter Error:", result)
+            return "Network fluctuation. Try again."
+
+        if not result["choices"]:
+            return "Empty response from AI."
+
         output = result["choices"][0]["message"]["content"]
 
         try:
@@ -141,7 +158,7 @@ REPLY: <actual reply>
             category = "personal"
             reply = output
 
-        # Save full conversation memory
+        # Save full conversation
         combined_memory = f"User: {user_text}\nROR: {reply}"
         save_memory(combined_memory, category)
 
@@ -149,7 +166,7 @@ REPLY: <actual reply>
 
     except Exception as e:
         print("AI Error:", e)
-        return "ROR encountered an error."
+        return "Temporary AI issue. Try again."
 
 
 # ================================
@@ -163,7 +180,7 @@ def handle_text(message):
         bot.send_message(message.chat.id, reply)
     except Exception as e:
         print("Telegram Error:", e)
-        bot.send_message(message.chat.id, "ROR crashed.")
+        bot.send_message(message.chat.id, "Temporary issue.")
 
 
 # ================================
@@ -185,6 +202,7 @@ def webhook():
 @app.route("/")
 def index():
     return "ROR Brain Running with Permanent Memory"
+
 
 # ================================
 # START SERVER
