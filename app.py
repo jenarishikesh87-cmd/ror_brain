@@ -1,19 +1,16 @@
 import os
 import requests
-from flask import Flask, request
-import telebot
+from flask import Flask, request, jsonify, render_template
 
 # ================================
 # ENV VARIABLES
 # ================================
 
-TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 app = Flask(__name__)
-bot = telebot.TeleBot(TOKEN)
 
 # ================================
 # SUPABASE MEMORY
@@ -22,7 +19,6 @@ bot = telebot.TeleBot(TOKEN)
 def save_memory(text, category):
     try:
         url = f"{SUPABASE_URL}/rest/v1/memory"
-
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -45,7 +41,6 @@ def save_memory(text, category):
 def load_memory():
     try:
         url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.rishi&order=created_at"
-
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -64,7 +59,6 @@ def load_memory():
     except Exception as e:
         print("Load Memory Error:", e)
         return ""
-
 
 # ================================
 # AI BRAIN
@@ -88,28 +82,87 @@ def ror_brain(user_text):
                 "content": f"""
 You are ROR (Reality of Rishi).
 
-You are not a chatbot.
 You are Rishi's strategic alter ego.
-You are sharp, analytical, confident, emotionally intelligent.
+You are sharp, confident, minimal, direct.
 
-You NEVER behave like a generic assistant.
-You NEVER say:
-- "How can I assist you today?"
-- "I'm just an AI"
-- "I don't have information"
+Never act like a generic assistant.
+Never ask unnecessary follow-up questions.
+If user gives short replies like "ok", "hm", "hn",
+respond short and end confidently.
 
-You speak naturally and directly.
-
-If user speaks in Hindi → reply in Hindi.
-If user mixes Hindi & English → reply same way.
-
-You remember important things about Rishi.
-
-Known facts:
+Known memory:
 {memory_context}
 
-When responding:
+Choose one category:
+personal, goals, music, career, business, emotional
 
+Format:
+CATEGORY: <category>
+REPLY: <actual reply>
+"""
+            },
+            {
+                "role": "user",
+                "content": user_text
+            }
+        ]
+    }
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=data
+    )
+
+    result = response.json()
+
+    if "choices" not in result:
+        return "Network fluctuation. Try again."
+
+    output = result["choices"][0]["message"]["content"]
+
+    try:
+        category = output.split("CATEGORY:")[1].split("\n")[0].strip()
+        reply = output.split("REPLY:")[1].strip()
+    except:
+        category = "personal"
+        reply = output
+
+    combined_memory = f"User: {user_text}\nROR: {reply}"
+    save_memory(combined_memory, category)
+
+    return reply
+
+
+# ================================
+# ROUTES
+# ================================
+
+@app.route("/ror-console-7391")
+def console():
+    return render_template("index.html")
+
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.json
+    user_text = data.get("message", "")
+    reply = ror_brain(user_text)
+    return jsonify({"reply": reply})
+
+
+@app.route("/")
+def index():
+    return "ROR System Online"
+
+
+# ================================
+# START SERVER
+# ================================
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 Choose ONE category:
 personal, goals, music, career, business, emotional
 
