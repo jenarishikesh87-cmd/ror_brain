@@ -32,10 +32,7 @@ def supabase_set(key, value):
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates"
     }
-    payload = {
-        "key": key,
-        "value": value
-    }
+    payload = {"key": key, "value": value}
     requests.post(url, headers=headers, json=payload)
 
 # ---------------- LOAD STATE ----------------
@@ -55,14 +52,13 @@ def load_state():
 
 load_state()
 
-# ---------------- IDENTITY ----------------
+# ---------------- CORE IDENTITY ----------------
 
 IDENTITY_ANCHOR = """
 Rishi:
-- Strategic
-- Building long-term
-- Wants correction not comfort
-- Prefers clarity over hype
+- Strategic thinker
+- Long-term builder
+- Wants correction over comfort
 - Stabilize first, then guide
 """
 
@@ -78,10 +74,9 @@ def store_goal(text):
     active_goals.append(text)
     supabase_set("active_goals", json.dumps(active_goals))
 
-def get_goal_context():
-    if not active_goals:
-        return ""
-    return "\nActive goals:\n" + "\n".join(active_goals)
+def clear_goals():
+    active_goals.clear()
+    supabase_set("active_goals", json.dumps(active_goals))
 
 # ---------------- EMOTIONAL STATE ----------------
 
@@ -105,15 +100,6 @@ def update_emotional_history(state):
         emotional_history.pop(0)
     supabase_set("emotional_history", json.dumps(emotional_history))
 
-def get_emotional_pattern():
-    if emotional_history.count("low") >= 3:
-        return "Low energy repeating recently."
-    if emotional_history.count("confused") >= 3:
-        return "Confusion repeating recently."
-    if emotional_history.count("frustrated") >= 3:
-        return "Frustration increasing recently."
-    return ""
-
 # ---------------- STRATEGIC DRIFT ----------------
 
 def update_focus_and_drift(text):
@@ -129,16 +115,39 @@ def update_focus_and_drift(text):
     supabase_set("focus_score", str(focus_score))
     supabase_set("drift_score", str(drift_score))
 
-def get_focus_status():
-    if drift_score >= 5:
-        return "You are drifting from core direction."
-    if focus_score >= 5:
-        return "You are strongly aligned with your direction."
-    return ""
+# ---------------- COMMAND SYSTEM ----------------
+
+def handle_command(user_text):
+
+    if user_text == "/goals":
+        if not active_goals:
+            return "No active goals."
+        return "\n".join(active_goals)
+
+    if user_text == "/clear_goals":
+        clear_goals()
+        return "Goals cleared."
+
+    if user_text == "/state":
+        return f"Focus: {focus_score}\nDrift: {drift_score}\nEmotions: {emotional_history}"
+
+    if user_text == "/reset_focus":
+        global focus_score, drift_score
+        focus_score = 0
+        drift_score = 0
+        supabase_set("focus_score", "0")
+        supabase_set("drift_score", "0")
+        return "Focus and drift reset."
+
+    return None
 
 # ---------------- ROR BRAIN ----------------
 
 def ror_brain(user_text):
+
+    command_response = handle_command(user_text)
+    if command_response:
+        return command_response
 
     if detect_goal(user_text):
         store_goal(user_text)
@@ -147,31 +156,25 @@ def ror_brain(user_text):
     update_emotional_history(state)
     update_focus_and_drift(user_text)
 
-    emotional_pattern = get_emotional_pattern()
-    focus_status = get_focus_status()
-    goal_context = get_goal_context()
-
     system_prompt = f"""
 You are ROR.
 
 Identity:
 {IDENTITY_ANCHOR}
 
-{goal_context}
+Active Goals:
+{active_goals}
 
 Detected state: {state}
-Pattern: {emotional_pattern}
-Alignment: {focus_status}
+Focus score: {focus_score}
+Drift score: {drift_score}
 
 Behavior:
-- Stabilize emotion first.
-- Then clarify reality.
-- Then suggest next strong move.
+- Stabilize emotion.
+- Clarify reality.
+- Align with goals.
+- Suggest strongest move.
 - Speak naturally.
-- Do not format responses.
-- Do not label categories.
-- Do not sound like an AI.
-- No robotic tone.
 """
 
     headers = {
