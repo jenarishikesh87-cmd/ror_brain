@@ -2,25 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport"
+content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
 <title>ROR</title>
 
 <style>
 * {
-  box-sizing: border-box;
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
   font-family: system-ui, -apple-system, sans-serif;
 }
 
 body {
   background: #000;
-  color: white;
   height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  color: white;
 }
 
 /* LOGO */
@@ -30,7 +32,7 @@ body {
 }
 
 /* MIC BUTTON */
-.mic-wrapper {
+.mic-container {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -38,8 +40,8 @@ body {
 }
 
 .mic-button {
-  width: 90px;
-  height: 90px;
+  width: 95px;
+  height: 95px;
   border-radius: 50%;
   background: radial-gradient(circle, #ff3b00 0%, #8b0000 70%);
   display: flex;
@@ -48,16 +50,31 @@ body {
   box-shadow: 0 0 15px #ff3b00,
               0 0 30px #ff0000;
   transition: 0.3s ease;
+  position: relative;
+  cursor: pointer;
 }
 
-.mic-button:active {
-  transform: scale(0.95);
-  box-shadow: 0 0 25px #ff3b00,
-              0 0 50px #ff0000;
+.mic-button.listening {
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 15px #ff3b00,
+                0 0 30px #ff0000;
+  }
+  50% {
+    box-shadow: 0 0 40px #ff3b00,
+                0 0 80px #ff0000;
+  }
+  100% {
+    box-shadow: 0 0 15px #ff3b00,
+                0 0 30px #ff0000;
+  }
 }
 
 .mic-icon {
-  font-size: 30px;
+  font-size: 34px;
 }
 
 /* MODE SWITCH */
@@ -67,7 +84,6 @@ body {
   border-radius: 30px;
   display: flex;
   gap: 15px;
-  align-items: center;
   border: 1px solid #222;
 }
 
@@ -78,7 +94,7 @@ body {
   border: 1px solid #333;
   color: #aaa;
   cursor: pointer;
-  transition: 0.3s;
+  transition: 0.3s ease;
 }
 
 .mode-btn.active {
@@ -93,7 +109,7 @@ body {
 
 <img src="{{ url_for('static', filename='ror-logo.png') }}" class="logo">
 
-<div class="mic-wrapper">
+<div class="mic-container">
   <div class="mic-button" id="micBtn">
     <div class="mic-icon">🎤</div>
   </div>
@@ -109,10 +125,69 @@ const micBtn = document.getElementById("micBtn");
 const micMode = document.getElementById("micMode");
 const keyboardMode = document.getElementById("keyboardMode");
 
+let recognition;
+let listening = false;
+
+/* Speech Recognition Setup */
+if ('webkitSpeechRecognition' in window) {
+  recognition = new webkitSpeechRecognition();
+  recognition.continuous = false;
+  recognition.lang = "en-IN";
+
+  recognition.onresult = async function(event) {
+    const transcript = event.results[0][0].transcript;
+    await sendVoiceToBackend(transcript);
+  };
+
+  recognition.onend = function() {
+    micBtn.classList.remove("listening");
+    listening = false;
+  };
+}
+
+/* Mic Click */
 micBtn.addEventListener("click", () => {
-  alert("Mic Activated"); // Later we connect real voice logic
+  if (!recognition) {
+    alert("Speech Recognition not supported in this browser.");
+    return;
+  }
+
+  if (!listening) {
+    recognition.start();
+    micBtn.classList.add("listening");
+    listening = true;
+  } else {
+    recognition.stop();
+  }
 });
 
+/* Send voice to backend */
+async function sendVoiceToBackend(text) {
+  try {
+    const response = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text })
+    });
+
+    const data = await response.json();
+
+    /* Speak reply */
+    speakReply(data.reply);
+
+  } catch (error) {
+    alert("Server error.");
+  }
+}
+
+/* Text to Speech */
+function speakReply(text) {
+  const speech = new SpeechSynthesisUtterance(text);
+  speech.lang = "en-IN";
+  window.speechSynthesis.speak(speech);
+}
+
+/* Mode Switching */
 micMode.addEventListener("click", () => {
   micMode.classList.add("active");
   keyboardMode.classList.remove("active");
@@ -121,6 +196,9 @@ micMode.addEventListener("click", () => {
 keyboardMode.addEventListener("click", () => {
   keyboardMode.classList.add("active");
   micMode.classList.remove("active");
+
+  /* Redirect to chat UI later */
+  window.location.href = "/chat-ui";
 });
 </script>
 
