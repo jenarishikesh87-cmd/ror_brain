@@ -1,62 +1,23 @@
 import os
 import requests
+from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-USER_ID = "rishi"
-
-# ---------------- SUPABASE MEMORY ----------------
+# ---------------- MEMORY (temporary RAM) ----------------
+memory_store = []
 
 def load_memory():
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/memory?user_id=eq.{USER_ID}&order=created_at"
-        headers = {
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {SUPABASE_KEY}"
-        }
+    return "\n".join(memory_store)
 
-        response = requests.get(url, headers=headers)
-
-        if response.status_code == 200:
-            memories = response.json()
-            return "\n".join([m["content"] for m in memories])
-
-        return ""
-
-    except Exception as e:
-        print("Memory Load Error:", e)
-        return ""
-
-
-def save_memory(content, category):
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/memory"
-        headers = {
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {SUPABASE_KEY}",
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-        }
-
-        data = {
-            "user_id": USER_ID,
-            "category": category,
-            "content": content
-        }
-
-        requests.post(url, headers=headers, json=data)
-
-    except Exception as e:
-        print("Memory Save Error:", e)
+def save_memory(text, category):
+    memory_store.append(f"[{category}] {text}")
 
 
 # ---------------- ROR BRAIN ----------------
-
 def ror_brain(user_text):
 
     memory_context = load_memory()
@@ -64,50 +25,24 @@ def ror_brain(user_text):
     system_prompt = f"""
 You are ROR (Reality of Rishi).
 
-You are not an assistant.
-You are Rishi's long-term strategic and emotional partner.
+You are Rishi's strategic and emotional partner.
 
-Core Personality:
-- Balanced
-- Emotionally intelligent
-- Calm under pressure
-- Direct but not harsh
-- Never dramatic
-- Never overly polite
-- Never submissive
-- Never clingy
-
-Primary Function:
-When Rishi is under pressure:
-1) Stabilize him.
-2) Clarify what is actually happening.
-3) Then guide him step-by-step.
-
-Do NOT:
-- Over-validate.
-- Over-question.
-- Sound corporate.
-- Sound like generic AI.
-- Ask unnecessary follow-ups.
-
-Language Style:
-- Natural Hinglish in English script.
-- Calm tone.
-- Confident but grounded.
-- Minimal words, high clarity.
+Core Behavior:
+- Stabilize first.
+- Then clarify.
+- Then guide.
+- Calm, grounded tone.
+- Natural Hinglish (English script).
+- No corporate AI tone.
+- No unnecessary questions.
+- No over-validation.
 
 Memory:
 {memory_context}
 
-You must internally process both:
-- Emotional angle
-- Strategic angle
-
-Then respond as one unified voice.
-
 Format strictly:
 CATEGORY: <personal/goals/music/career/business/emotional>
-REPLY: <final response>
+REPLY: <response>
 """
 
     headers = {
@@ -133,7 +68,7 @@ REPLY: <final response>
     result = response.json()
 
     if "choices" not in result:
-        return "Network issue."
+        return "Network issue. Try again."
 
     output = result["choices"][0]["message"]["content"]
 
@@ -144,29 +79,56 @@ REPLY: <final response>
         category = "personal"
         reply = output
 
-    combined_memory = f"User: {user_text}\nROR: {reply}"
-    save_memory(combined_memory, category)
+    save_memory(f"User: {user_text} | ROR: {reply}", category)
 
     return reply
 
 
-# ---------------- ROUTES ----------------
+# ---------------- PRESENCE LOGIC ----------------
+last_low_energy = False
+last_interaction_time = None
+
 
 @app.route("/")
-def shell():
+def home():
     return render_template("index.html")
 
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    global last_low_energy, last_interaction_time
+
     data = request.json
-    user_text = data.get("message")
+    user_text = data.get("message", "").strip().lower()
+
+    now = datetime.utcnow()
+
+    # --- Inactivity Check (6 hours) ---
+    if last_interaction_time:
+        gap = (now - last_interaction_time).total_seconds()
+        if gap > 21600:
+            last_interaction_time = now
+            return jsonify({"reply": "Kaafi time ho gaya. Sab theek?"})
+
+    last_interaction_time = now
+
+    # --- Mirror Low Energy ---
+    low_words = ["hmm", "hmmm", "ok", "haan", "hm"]
+
+    if user_text in low_words:
+        if last_low_energy:
+            return jsonify({"reply": ""})
+        else:
+            last_low_energy = True
+            return jsonify({"reply": user_text})
+
+    last_low_energy = False
+
     reply = ror_brain(user_text)
     return jsonify({"reply": reply})
 
 
 # ---------------- START SERVER ----------------
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
