@@ -2,174 +2,126 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport"
-content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>ROR</title>
 
 <style>
 * {
   box-sizing: border-box;
-}
-
-html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  background: #000;
   font-family: system-ui, -apple-system, sans-serif;
-  overflow: hidden;
 }
 
-/* MAIN LAYOUT */
-.chat-container {
-  height: 100dvh;
+body {
+  background: #000;
+  color: white;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
-/* HEADER */
-.header {
-  background: #3f51b5;
-  color: white;
-  padding: 14px;
-  font-size: 18px;
+/* LOGO */
+.logo {
+  width: 180px;
+  margin-bottom: 60px;
 }
 
-/* MESSAGES AREA */
-.messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 15px;
+/* MIC BUTTON */
+.mic-wrapper {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 50px;
 }
 
-/* MESSAGE BUBBLES */
-.message {
-  max-width: 75%;
-  padding: 12px 15px;
-  border-radius: 18px;
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.user {
-  align-self: flex-end;
-  background: #1f1f1f;
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-
-.bot {
-  align-self: flex-start;
-  background: #2a2a2a;
-  color: #ddd;
-  border-bottom-left-radius: 4px;
-}
-
-/* INPUT AREA */
-.input-area {
+.mic-button {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ff3b00 0%, #8b0000 70%);
   display: flex;
-  padding: 10px;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 0 15px #ff3b00,
+              0 0 30px #ff0000;
+  transition: 0.3s ease;
+}
+
+.mic-button:active {
+  transform: scale(0.95);
+  box-shadow: 0 0 25px #ff3b00,
+              0 0 50px #ff0000;
+}
+
+.mic-icon {
+  font-size: 30px;
+}
+
+/* MODE SWITCH */
+.mode-switch {
   background: #111;
-  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 30px;
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  border: 1px solid #222;
 }
 
-input {
-  flex: 1;
-  padding: 12px;
-  border-radius: 25px;
-  border: none;
-  outline: none;
-  background: #222;
-  color: white;
-  font-size: 14px;
-}
-
-button {
-  padding: 12px 18px;
-  border-radius: 25px;
-  border: none;
-  background: #444;
-  color: white;
+.mode-btn {
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: transparent;
+  border: 1px solid #333;
+  color: #aaa;
   cursor: pointer;
+  transition: 0.3s;
 }
 
-button:active {
-  background: #666;
+.mode-btn.active {
+  background: #ff3b00;
+  color: white;
+  border: none;
 }
 </style>
 </head>
 
 <body>
 
-<div class="chat-container">
+<img src="logo.png" class="logo">
 
-  <div class="header">Ror</div>
-
-  <div class="messages" id="messages"></div>
-
-  <div class="input-area">
-    <input type="text" id="userInput" placeholder="Type a message...">
-    <button onclick="sendMessage()">Send</button>
+<div class="mic-wrapper">
+  <div class="mic-button" id="micBtn">
+    <div class="mic-icon">🎤</div>
   </div>
+</div>
 
+<div class="mode-switch">
+  <button class="mode-btn active" id="micMode">Mic Mode</button>
+  <button class="mode-btn" id="keyboardMode">Keyboard Mode</button>
 </div>
 
 <script>
-const messages = document.getElementById("messages");
-const input = document.getElementById("userInput");
+const micBtn = document.getElementById("micBtn");
+const micMode = document.getElementById("micMode");
+const keyboardMode = document.getElementById("keyboardMode");
 
-function addMessage(text, sender) {
-  const div = document.createElement("div");
-  div.classList.add("message", sender);
-  div.innerText = text;
-  messages.appendChild(div);
-  scrollToBottom();
-}
-
-function scrollToBottom() {
-  setTimeout(() => {
-    messages.scrollTop = messages.scrollHeight;
-  }, 100);
-}
-
-async function sendMessage() {
-  const text = input.value.trim();
-  if (!text) return;
-
-  addMessage(text, "user");
-  input.value = "";
-
-  try {
-    const response = await fetch("/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ message: text })
-    });
-
-    const data = await response.json();
-    addMessage(data.reply, "bot");
-
-  } catch (error) {
-    addMessage("Server error.", "bot");
-  }
-}
-
-/* ENTER TO SEND */
-input.addEventListener("keypress", function(e) {
-  if (e.key === "Enter") {
-    sendMessage();
-  }
+micBtn.addEventListener("click", () => {
+  alert("Mic Activated"); // Later we connect real voice logic
 });
 
-/* Fix keyboard overlap in mobile */
-window.addEventListener("resize", scrollToBottom);
-input.addEventListener("focus", scrollToBottom);
+micMode.addEventListener("click", () => {
+  micMode.classList.add("active");
+  keyboardMode.classList.remove("active");
+});
+
+keyboardMode.addEventListener("click", () => {
+  keyboardMode.classList.add("active");
+  micMode.classList.remove("active");
+});
 </script>
 
 </body>
