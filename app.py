@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template
@@ -6,47 +7,95 @@ from flask import Flask, request, jsonify, render_template
 app = Flask(__name__)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# ---------------- CORE IDENTITY ANCHOR ----------------
+# ---------------- SUPABASE HELPERS ----------------
+
+def supabase_get(key):
+    url = f"{SUPABASE_URL}/rest/v1/ror_state?key=eq.{key}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}"
+    }
+    r = requests.get(url, headers=headers)
+    data = r.json()
+    if data:
+        return data[0]["value"]
+    return None
+
+def supabase_set(key, value):
+    url = f"{SUPABASE_URL}/rest/v1/ror_state"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates"
+    }
+    payload = {
+        "key": key,
+        "value": value
+    }
+    requests.post(url, headers=headers, json=payload)
+
+# ---------------- LOAD PERSISTENT STATE ----------------
+
+def load_state():
+    global active_goals, emotional_history, focus_score, drift_score
+
+    goals = supabase_get("active_goals")
+    history = supabase_get("emotional_history")
+    focus = supabase_get("focus_score")
+    drift = supabase_get("drift_score")
+
+    active_goals = json.loads(goals) if goals else []
+    emotional_history = json.loads(history) if history else []
+    focus_score = int(focus) if focus else 0
+    drift_score = int(drift) if drift else 0
+
+load_state()
+
+# ---------------- CORE IDENTITY ----------------
+
 IDENTITY_ANCHOR = """
 Rishi Identity Core:
-
 - Strategic thinker.
 - Building something serious long-term.
 - Prefers stabilization before direction.
 - Wants correction + better option.
 - Dislikes generic tone.
 - Values emotional intelligence + clarity.
-- Not seeking hype.
-- Seeks grounded growth.
 """
 
-# ---------------- MEMORY ----------------
-memory_store = []
-emotional_history = []
-focus_score = 0
-drift_score = 0
+# ---------------- GOALS ----------------
 
-def load_memory():
-    return "\n".join(memory_store)
+def detect_goal(text):
+    text = text.lower()
+    if "i want to" in text or "my goal is" in text or "i will build" in text:
+        return True
+    return False
 
-def save_memory(text, category):
-    memory_store.append(f"[{category}] {text}")
+def store_goal(text):
+    active_goals.append(text)
+    supabase_set("active_goals", json.dumps(active_goals))
 
-# ---------------- EMOTIONAL STATE DETECTION ----------------
+def get_goal_context():
+    if not active_goals:
+        return "No active goals stored."
+    return "Active goals:\n" + "\n".join(active_goals)
+
+# ---------------- EMOTIONAL STATE ----------------
+
 def detect_state(text):
     text = text.lower()
 
-    if any(word in text for word in ["tired", "exhausted", "low", "sad", "empty"]):
+    if any(w in text for w in ["tired", "low", "sad", "empty"]):
         return "low"
-
-    if any(word in text for word in ["confused", "don’t know", "dont know", "what should", "stuck"]):
+    if any(w in text for w in ["confused", "stuck", "dont know"]):
         return "confused"
-
-    if any(word in text for word in ["angry", "frustrated", "irritated", "annoyed"]):
+    if any(w in text for w in ["angry", "frustrated"]):
         return "frustrated"
-
-    if any(word in text for word in ["plan", "goal", "build", "strategy", "future"]):
+    if any(w in text for w in ["plan", "goal", "build", "strategy"]):
         return "focused"
 
     return "neutral"
@@ -55,36 +104,31 @@ def update_emotional_history(state):
     emotional_history.append(state)
     if len(emotional_history) > 10:
         emotional_history.pop(0)
+    supabase_set("emotional_history", json.dumps(emotional_history))
 
 def get_emotional_pattern():
-    if not emotional_history:
-        return "No strong pattern detected."
-
-    low_count = emotional_history.count("low")
-    confused_count = emotional_history.count("confused")
-    frustrated_count = emotional_history.count("frustrated")
-
-    if low_count >= 3:
+    if emotional_history.count("low") >= 3:
         return "Low energy repeating."
-    if confused_count >= 3:
+    if emotional_history.count("confused") >= 3:
         return "Confusion repeating."
-    if frustrated_count >= 3:
+    if emotional_history.count("frustrated") >= 3:
         return "Frustration increasing."
-
     return "Pattern stable."
 
-# ---------------- STRATEGIC DRIFT DETECTION ----------------
+# ---------------- STRATEGIC DRIFT ----------------
+
 def update_focus_and_drift(text):
     global focus_score, drift_score
 
-    text = text.lower()
-
-    if any(word in text for word in ["goal", "plan", "build", "strategy", "future"]):
+    if any(w in text.lower() for w in ["goal", "plan", "build", "future"]):
         focus_score += 1
         drift_score = max(0, drift_score - 1)
     else:
         drift_score += 1
         focus_score = max(0, focus_score - 1)
+
+    supabase_set("focus_score", str(focus_score))
+    supabase_set("drift_score", str(drift_score))
 
 def get_focus_status():
     if drift_score >= 5:
@@ -94,15 +138,19 @@ def get_focus_status():
     return "Strategic state balanced."
 
 # ---------------- ROR BRAIN ----------------
+
 def ror_brain(user_text):
+
+    if detect_goal(user_text):
+        store_goal(user_text)
 
     state = detect_state(user_text)
     update_emotional_history(state)
     update_focus_and_drift(user_text)
 
-    memory_context = load_memory()
     emotional_pattern = get_emotional_pattern()
     focus_status = get_focus_status()
+    goal_context = get_goal_context()
 
     system_prompt = f"""
 You are ROR (Reality of Rishi).
@@ -110,38 +158,23 @@ You are ROR (Reality of Rishi).
 Core Identity:
 {IDENTITY_ANCHOR}
 
-You are his stabilizing presence and strategic partner.
+Active Goals:
+{goal_context}
+
+Detected emotional state: {state}
+Recent emotional pattern: {emotional_pattern}
+Strategic alignment: {focus_status}
 
 Behavior Rule:
-1. Stabilize emotion first.
+1. Stabilize emotion.
 2. Clarify reality.
-3. Suggest strongest next move.
-
-Detected emotional state:
-{state}
-
-Recent emotional pattern:
-{emotional_pattern}
-
-Strategic alignment status:
-{focus_status}
-
-Recent memory:
-{memory_context}
-
-Do NOT:
-- Over-validate
-- Sound motivational
-- Sound robotic
-- Ask unnecessary questions
-- Act clingy
+3. Align response with active goals.
+4. Suggest strongest next move.
 
 Tone:
-Natural Hinglish (English script).
-Mature. Calm. Sharp.
+Natural Hinglish. Calm. Sharp.
 
 Format strictly:
-
 CATEGORY: <personal/goals/music/career/business/emotional>
 REPLY: <response>
 """
@@ -174,19 +207,13 @@ REPLY: <response>
     output = result["choices"][0]["message"]["content"]
 
     try:
-        category = output.split("CATEGORY:")[1].split("\n")[0].strip()
         reply = output.split("REPLY:")[1].strip()
     except:
-        category = "personal"
         reply = output
-
-    save_memory(f"User: {user_text} | ROR: {reply}", category)
 
     return reply
 
-# ---------------- PRESENCE LOGIC ----------------
-last_low_energy = False
-last_interaction_time = None
+# ---------------- ROUTES ----------------
 
 @app.route("/")
 def home():
@@ -194,34 +221,13 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    global last_low_energy, last_interaction_time
-
     data = request.json
-    user_text = data.get("message", "").strip().lower()
-
-    now = datetime.utcnow()
-
-    if last_interaction_time:
-        gap = (now - last_interaction_time).total_seconds()
-        if gap > 21600:
-            last_interaction_time = now
-            return jsonify({"reply": "Kaafi time ho gaya. Sab theek?"})
-
-    last_interaction_time = now
-
-    low_words = ["hmm", "hmmm", "ok", "haan", "hm"]
-
-    if user_text in low_words:
-        if last_low_energy:
-            return jsonify({"reply": ""})
-        else:
-            last_low_energy = True
-            return jsonify({"reply": user_text})
-
-    last_low_energy = False
+    user_text = data.get("message", "").strip()
 
     reply = ror_brain(user_text)
     return jsonify({"reply": reply})
+
+# ---------------- START SERVER ----------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
