@@ -38,7 +38,7 @@ def supabase_set(key, value):
     }
     requests.post(url, headers=headers, json=payload)
 
-# ---------------- LOAD PERSISTENT STATE ----------------
+# ---------------- LOAD STATE ----------------
 
 def load_state():
     global active_goals, emotional_history, focus_score, drift_score
@@ -55,16 +55,15 @@ def load_state():
 
 load_state()
 
-# ---------------- CORE IDENTITY ----------------
+# ---------------- IDENTITY ----------------
 
 IDENTITY_ANCHOR = """
-Rishi Identity Core:
-- Strategic thinker.
-- Building something serious long-term.
-- Prefers stabilization before direction.
-- Wants correction + better option.
-- Dislikes generic tone.
-- Values emotional intelligence + clarity.
+Rishi:
+- Strategic
+- Building long-term
+- Wants correction not comfort
+- Prefers clarity over hype
+- Stabilize first, then guide
 """
 
 # ---------------- GOALS ----------------
@@ -81,8 +80,8 @@ def store_goal(text):
 
 def get_goal_context():
     if not active_goals:
-        return "No active goals stored."
-    return "Active goals:\n" + "\n".join(active_goals)
+        return ""
+    return "\nActive goals:\n" + "\n".join(active_goals)
 
 # ---------------- EMOTIONAL STATE ----------------
 
@@ -108,12 +107,12 @@ def update_emotional_history(state):
 
 def get_emotional_pattern():
     if emotional_history.count("low") >= 3:
-        return "Low energy repeating."
+        return "Low energy repeating recently."
     if emotional_history.count("confused") >= 3:
-        return "Confusion repeating."
+        return "Confusion repeating recently."
     if emotional_history.count("frustrated") >= 3:
-        return "Frustration increasing."
-    return "Pattern stable."
+        return "Frustration increasing recently."
+    return ""
 
 # ---------------- STRATEGIC DRIFT ----------------
 
@@ -132,10 +131,10 @@ def update_focus_and_drift(text):
 
 def get_focus_status():
     if drift_score >= 5:
-        return "Strategic drift increasing."
+        return "You are drifting from core direction."
     if focus_score >= 5:
-        return "Strong strategic alignment."
-    return "Strategic state balanced."
+        return "You are strongly aligned with your direction."
+    return ""
 
 # ---------------- ROR BRAIN ----------------
 
@@ -153,30 +152,26 @@ def ror_brain(user_text):
     goal_context = get_goal_context()
 
     system_prompt = f"""
-You are ROR (Reality of Rishi).
+You are ROR.
 
-Core Identity:
+Identity:
 {IDENTITY_ANCHOR}
 
-Active Goals:
 {goal_context}
 
-Detected emotional state: {state}
-Recent emotional pattern: {emotional_pattern}
-Strategic alignment: {focus_status}
+Detected state: {state}
+Pattern: {emotional_pattern}
+Alignment: {focus_status}
 
-Behavior Rule:
-1. Stabilize emotion.
-2. Clarify reality.
-3. Align response with active goals.
-4. Suggest strongest next move.
-
-Tone:
-Natural Hinglish. Calm. Sharp.
-
-Format strictly:
-CATEGORY: <personal/goals/music/career/business/emotional>
-REPLY: <response>
+Behavior:
+- Stabilize emotion first.
+- Then clarify reality.
+- Then suggest next strong move.
+- Speak naturally.
+- Do not format responses.
+- Do not label categories.
+- Do not sound like an AI.
+- No robotic tone.
 """
 
     headers = {
@@ -186,7 +181,7 @@ REPLY: <response>
 
     data = {
         "model": "openai/gpt-4o-mini",
-        "temperature": 0.7,
+        "temperature": 0.75,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text}
@@ -204,14 +199,7 @@ REPLY: <response>
     if "choices" not in result:
         return "Network issue."
 
-    output = result["choices"][0]["message"]["content"]
-
-    try:
-        reply = output.split("REPLY:")[1].strip()
-    except:
-        reply = output
-
-    return reply
+    return result["choices"][0]["message"]["content"]
 
 # ---------------- ROUTES ----------------
 
@@ -223,11 +211,10 @@ def home():
 def chat():
     data = request.json
     user_text = data.get("message", "").strip()
-
     reply = ror_brain(user_text)
     return jsonify({"reply": reply})
 
-# ---------------- START SERVER ----------------
+# ---------------- START ----------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
