@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ROR</title>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui;}
 body{
 background:#000;
-color:white;
+color:#fff;
 height:100vh;
 overflow:hidden;
 display:flex;
@@ -25,11 +25,11 @@ left:50%;
 transform:translate(-50%,-50%);
 width:500px;
 height:500px;
-background:radial-gradient(circle,#ff2a0050 0%,transparent 70%);
+background:radial-gradient(circle,#ff2a0030 0%,transparent 70%);
 z-index:-2;
 }
 
-/* CENTER LOGO */
+/* LOGO */
 .logo{
 position:fixed;
 top:50%;
@@ -37,43 +37,35 @@ left:50%;
 transform:translate(-50%,-50%);
 width:180px;
 opacity:1;
-transition:opacity 0.5s ease;
+transition:opacity .4s ease;
 z-index:-1;
 }
 
-/* TOGGLE SWITCH */
-.toggle{
+/* SLIDE TOGGLE DRAWER */
+.drawer{
 position:fixed;
 top:15px;
-right:15px;
-width:90px;
+right:-80px;
+width:80px;
 height:40px;
 background:#111;
-border-radius:25px;
+border-radius:25px 0 0 25px;
 display:flex;
 align-items:center;
-justify-content:space-between;
-padding:0 10px;
+justify-content:space-around;
+padding:5px;
+transition:.3s ease;
+z-index:100;
+}
+
+.drawer.open{ right:0; }
+
+.drawer span{
 cursor:pointer;
-border:1px solid #222;
+font-size:18px;
 }
 
-.slider{
-position:absolute;
-width:40px;
-height:32px;
-background:#ff3b00;
-border-radius:20px;
-transition:0.3s ease;
-}
-
-.icon{
-z-index:2;
-font-size:16px;
-color:#aaa;
-}
-
-/* CHAT AREA */
+/* CHAT */
 .chat{
 flex:1;
 overflow-y:auto;
@@ -86,9 +78,8 @@ flex-direction:column;
 max-width:75%;
 padding:12px 15px;
 border-radius:18px;
-margin-bottom:5px;
+margin-bottom:2px;
 font-size:14px;
-position:relative;
 }
 
 .user{
@@ -101,22 +92,61 @@ align-self:flex-start;
 background:#2a2a2a;
 }
 
-.time{
+.meta{
 font-size:10px;
 color:#888;
-margin-top:4px;
+margin-bottom:12px;
+}
+
+.user-meta{
+align-self:flex-end;
 text-align:right;
+}
+
+.bot-meta{
+align-self:flex-start;
+text-align:left;
 }
 
 /* MIC PANEL */
 .mic-panel{
 position:fixed;
-bottom:60px;
+bottom:70px;
 left:50%;
 transform:translateX(-50%);
 display:flex;
 justify-content:center;
 align-items:center;
+z-index:10;
+}
+
+/* LIQUID SVG RING */
+.energy{
+position:absolute;
+width:160px;
+height:160px;
+display:none;
+animation:spin 8s linear infinite;
+}
+
+@keyframes spin{
+from{transform:rotate(0deg);}
+to{transform:rotate(360deg);}
+}
+
+.energy path{
+fill:none;
+stroke:url(#grad);
+stroke-width:8;
+stroke-linecap:round;
+filter:drop-shadow(0 0 12px #ff3b00);
+animation:morph 4s ease-in-out infinite alternate;
+}
+
+@keyframes morph{
+0%{stroke-width:6;}
+50%{stroke-width:12;}
+100%{stroke-width:6;}
 }
 
 .mic{
@@ -128,42 +158,12 @@ display:flex;
 justify-content:center;
 align-items:center;
 box-shadow:0 0 25px #ff0000;
-position:relative;
 cursor:pointer;
+position:relative;
+z-index:5;
 }
 
-/* SIRI STYLE WAVE */
-.wave-container{
-position:absolute;
-width:140px;
-height:140px;
-display:flex;
-justify-content:center;
-align-items:center;
-pointer-events:none;
-}
-
-.wave-bar{
-width:6px;
-height:20px;
-margin:0 2px;
-background:linear-gradient(#ff3b00,#ff9900);
-border-radius:4px;
-animation:wave 1s infinite ease-in-out;
-}
-
-.wave-bar:nth-child(1){animation-delay:0s;}
-.wave-bar:nth-child(2){animation-delay:0.1s;}
-.wave-bar:nth-child(3){animation-delay:0.2s;}
-.wave-bar:nth-child(4){animation-delay:0.3s;}
-.wave-bar:nth-child(5){animation-delay:0.4s;}
-
-@keyframes wave{
-0%,100%{height:20px;}
-50%{height:60px;}
-}
-
-/* KEYBOARD PANEL */
+/* KEYBOARD */
 .keyboard{
 position:fixed;
 bottom:0;
@@ -174,12 +174,10 @@ padding:10px;
 display:flex;
 gap:8px;
 transform:translateY(100%);
-transition:0.3s ease;
+transition:.3s ease;
 }
 
-.keyboard.active{
-transform:translateY(0);
-}
+.keyboard.active{ transform:translateY(0); }
 
 input{
 flex:1;
@@ -188,7 +186,7 @@ border-radius:25px;
 border:none;
 outline:none;
 background:#222;
-color:white;
+color:#fff;
 }
 
 .send{
@@ -196,7 +194,7 @@ padding:12px 18px;
 border:none;
 border-radius:25px;
 background:#ff3b00;
-color:white;
+color:#fff;
 }
 </style>
 </head>
@@ -205,22 +203,27 @@ color:white;
 
 <img src="{{ url_for('static', filename='ror-logo.png') }}" class="logo" id="logo">
 
-<div class="toggle" id="toggle">
-<div class="slider" id="slider"></div>
-<span class="icon">🎤</span>
-<span class="icon">⌨️</span>
+<div class="drawer" id="drawer">
+<span id="micMode">🎤</span>
+<span id="keyMode">⌨️</span>
 </div>
 
 <div class="chat" id="chat"></div>
 
 <div class="mic-panel" id="micPanel">
-<div class="wave-container" id="waves" style="display:none;">
-<div class="wave-bar"></div>
-<div class="wave-bar"></div>
-<div class="wave-bar"></div>
-<div class="wave-bar"></div>
-<div class="wave-bar"></div>
-</div>
+
+<svg class="energy" id="energy" viewBox="0 0 200 200">
+<defs>
+<linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="#ff3b00"/>
+<stop offset="100%" stop-color="#ff9900"/>
+</linearGradient>
+</defs>
+<path d="M100 20
+C160 20,180 80,150 120
+C120 160,80 180,50 140
+C20 100,40 40,100 20Z"/>
+</svg>
 
 <div class="mic" id="micBtn">
 <svg width="22" height="22" fill="white" viewBox="0 0 24 24">
@@ -228,6 +231,7 @@ color:white;
 <path d="M19 11a7 7 0 01-14 0H3a9 9 0 0018 0h-2z"/>
 </svg>
 </div>
+
 </div>
 
 <div class="keyboard" id="keyboard">
@@ -236,36 +240,54 @@ color:white;
 </div>
 
 <script>
-const toggle=document.getElementById("toggle");
-const slider=document.getElementById("slider");
-const keyboard=document.getElementById("keyboard");
+const drawer=document.getElementById("drawer");
+const micMode=document.getElementById("micMode");
+const keyMode=document.getElementById("keyMode");
 const micPanel=document.getElementById("micPanel");
+const keyboard=document.getElementById("keyboard");
 const chat=document.getElementById("chat");
 const logo=document.getElementById("logo");
 const input=document.getElementById("input");
+const energy=document.getElementById("energy");
 const micBtn=document.getElementById("micBtn");
-const waves=document.getElementById("waves");
 
-let micMode=true;
+let micActive=true;
 
-toggle.onclick=()=>{
-micMode=!micMode;
-if(micMode){
-slider.style.transform="translateX(0)";
-keyboard.classList.remove("active");
-micPanel.style.display="flex";
-}else{
-slider.style.transform="translateX(45px)";
-keyboard.classList.add("active");
-micPanel.style.display="none";
+/* DRAWER OPEN ON EDGE TAP */
+document.body.addEventListener("click",(e)=>{
+if(e.clientX>window.innerWidth-20){
+drawer.classList.add("open");
+}else if(!drawer.contains(e.target)){
+drawer.classList.remove("open");
 }
+});
+
+micMode.onclick=()=>{
+micActive=true;
+micPanel.style.display="flex";
+keyboard.classList.remove("active");
+drawer.classList.remove("open");
+};
+
+keyMode.onclick=()=>{
+micActive=false;
+micPanel.style.display="none";
+keyboard.classList.add("active");
+drawer.classList.remove("open");
+input.focus();
 };
 
 function addMessage(text,type){
 const bubble=document.createElement("div");
 bubble.className="bubble "+type;
-bubble.innerHTML=text+"<div class='time'>Sent · "+new Date().toLocaleTimeString()+"</div>";
+bubble.innerText=text;
 chat.appendChild(bubble);
+
+const meta=document.createElement("div");
+meta.className="meta "+(type==="user"?"user-meta":"bot-meta");
+meta.innerText="Sent · "+new Date().toLocaleTimeString();
+chat.appendChild(meta);
+
 chat.scrollTop=chat.scrollHeight;
 logo.style.opacity=0;
 }
@@ -285,32 +307,33 @@ body:JSON.stringify({message:text})
 });
 const data=await res.json();
 addMessage(data.reply,"bot");
-
-const speech=new SpeechSynthesisUtterance(data.reply);
-speech.lang="hi-IN";
-window.speechSynthesis.speak(speech);
 }
 
 if('webkitSpeechRecognition'in window){
 const recognition=new webkitSpeechRecognition();
-recognition.lang="hi-IN";
-recognition.continuous=false;
-recognition.interimResults=false;
+recognition.lang="en-IN";
+recognition.continuous=true;
+recognition.interimResults=true;
 
 micBtn.onclick=()=>{
-waves.style.display="flex";
+energy.style.display="block";
 recognition.start();
 };
 
 recognition.onresult=e=>{
-waves.style.display="none";
-const transcript=e.results[0][0].transcript;
+let last=e.results[e.results.length-1];
+if(last.isFinal){
+energy.style.display="none";
+let transcript=last[0].transcript;
 addMessage(transcript,"user");
 sendToBackend(transcript);
+recognition.stop();
+}
 };
 
 recognition.onerror=()=>{
-waves.style.display="none";
+energy.style.display="none";
+recognition.stop();
 };
 }
 </script>
