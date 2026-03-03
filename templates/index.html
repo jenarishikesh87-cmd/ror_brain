@@ -6,26 +6,25 @@
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui;}
+
 body{
 background:#000;
 color:#fff;
 height:100vh;
 overflow:hidden;
-display:flex;
-flex-direction:column;
 position:relative;
 }
 
-/* RED BACK GLOW */
+/* RED AMBIENT GLOW */
 body::before{
 content:"";
 position:fixed;
 top:50%;
 left:50%;
 transform:translate(-50%,-50%);
-width:500px;
-height:500px;
-background:radial-gradient(circle,#ff2a0040 0%,transparent 70%);
+width:600px;
+height:600px;
+background:radial-gradient(circle,#ff2a0025 0%,transparent 70%);
 z-index:-2;
 }
 
@@ -41,63 +40,30 @@ transition:.4s ease;
 z-index:-1;
 }
 
-/* DRAWER TAB (always visible small edge) */
-.drawer-tab{
-position:fixed;
-top:20px;
-right:0;
-width:15px;
-height:50px;
-background:#ff3b00;
-border-radius:8px 0 0 8px;
-z-index:200;
-}
-
-/* DRAWER */
-.drawer{
-position:fixed;
-top:20px;
-right:-120px;
-width:120px;
-height:50px;
-background:#111;
-border-radius:25px 0 0 25px;
-display:flex;
-align-items:center;
-justify-content:space-around;
-transition:.3s ease;
-z-index:199;
-}
-
-.drawer.open{ right:0; }
-
-.drawer button{
-background:none;
-border:none;
-color:white;
-font-size:18px;
-cursor:pointer;
-}
-
-/* CHAT */
+/* CHAT FROM TOP */
 .chat{
-flex:1;
+position:absolute;
+top:0;
+left:0;
+right:0;
+bottom:140px;
 overflow-y:auto;
-padding:70px 15px 120px 15px;
+padding:20px 15px 0 15px;
 display:flex;
 flex-direction:column;
 }
 
+/* BUBBLES */
 .bubble{
 max-width:75%;
 padding:12px 15px;
 border-radius:18px;
-margin-bottom:3px;
+margin-bottom:4px;
 font-size:14px;
 }
 
-.user{ align-self:flex-end;background:#1c1c1c;}
-.bot{ align-self:flex-start;background:#2a2a2a;}
+.user{align-self:flex-end;background:#1c1c1c;}
+.bot{align-self:flex-start;background:#2a2a2a;}
 
 .meta{
 font-size:10px;
@@ -105,10 +71,10 @@ color:#888;
 margin-bottom:12px;
 }
 
-.user-meta{align-self:flex-end;text-align:right;}
-.bot-meta{align-self:flex-start;text-align:left;}
+.user-meta{text-align:right;align-self:flex-end;}
+.bot-meta{text-align:left;align-self:flex-start;}
 
-/* MIC AREA */
+/* MIC PANEL */
 .mic-panel{
 position:fixed;
 bottom:90px;
@@ -119,13 +85,13 @@ justify-content:center;
 align-items:center;
 }
 
-/* BLOB WAVE */
+/* BLOB */
 .blob{
 position:absolute;
-width:160px;
-height:160px;
-display:none;
+width:180px;
+height:180px;
 z-index:1;
+transition:.3s ease;
 }
 
 .mic{
@@ -139,6 +105,7 @@ align-items:center;
 box-shadow:0 0 25px #ff0000;
 cursor:pointer;
 z-index:2;
+transition:.3s ease;
 }
 
 /* KEYBOARD */
@@ -151,11 +118,7 @@ background:#111;
 padding:10px;
 display:flex;
 gap:8px;
-transform:translateY(100%);
-transition:.3s ease;
 }
-
-.keyboard.active{ transform:translateY(0); }
 
 input{
 flex:1;
@@ -181,16 +144,9 @@ color:#fff;
 
 <img src="{{ url_for('static', filename='ror-logo.png') }}" class="logo" id="logo">
 
-<div class="drawer-tab" id="drawerTab"></div>
-
-<div class="drawer" id="drawer">
-<button onclick="setMic()">🎤</button>
-<button onclick="setKeyboard()">⌨️</button>
-</div>
-
 <div class="chat" id="chat"></div>
 
-<div class="mic-panel" id="micPanel">
+<div class="mic-panel">
 
 <canvas class="blob" id="blobCanvas"></canvas>
 
@@ -203,16 +159,12 @@ color:#fff;
 
 </div>
 
-<div class="keyboard" id="keyboard">
+<div class="keyboard">
 <input type="text" id="input">
 <button class="send" onclick="sendMessage()">Send</button>
 </div>
 
 <script>
-const drawer=document.getElementById("drawer");
-const drawerTab=document.getElementById("drawerTab");
-const keyboard=document.getElementById("keyboard");
-const micPanel=document.getElementById("micPanel");
 const chat=document.getElementById("chat");
 const logo=document.getElementById("logo");
 const micBtn=document.getElementById("micBtn");
@@ -220,25 +172,13 @@ const input=document.getElementById("input");
 const canvas=document.getElementById("blobCanvas");
 const ctx=canvas.getContext("2d");
 
+canvas.width=180;
+canvas.height=180;
+
 let listening=false;
+let t=0;
 
-/* Drawer */
-drawerTab.onclick=()=> drawer.classList.toggle("open");
-
-/* Modes */
-function setMic(){
-keyboard.classList.remove("active");
-micPanel.style.display="flex";
-drawer.classList.remove("open");
-}
-
-function setKeyboard(){
-keyboard.classList.add("active");
-micPanel.style.display="none";
-drawer.classList.remove("open");
-}
-
-/* Messages */
+/* MESSAGES */
 function addMessage(text,type){
 const bubble=document.createElement("div");
 bubble.className="bubble "+type;
@@ -257,66 +197,77 @@ logo.style.opacity=0;
 async function sendMessage(){
 if(!input.value.trim())return;
 addMessage(input.value,"user");
+sendToBackend(input.value);
 input.value="";
 }
 
-/* Proper Mic */
-if('webkitSpeechRecognition'in window){
+async function sendToBackend(text){
+const res=await fetch("/chat",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({message:text})
+});
+const data=await res.json();
+addMessage(data.reply,"bot");
+}
+
+/* LIQUID BLOB ALWAYS ANIMATED */
+function drawBlob(){
+ctx.clearRect(0,0,180,180);
+ctx.fillStyle="rgba(255,60,0,0.6)";
+ctx.beginPath();
+
+for(let i=0;i<720;i++){
+let angle=i*Math.PI/360;
+let base= listening ? 75 : 60;
+let radius=base
++8*Math.sin(angle*2+t)
++5*Math.sin(angle*5+t*1.2);
+
+let x=90+radius*Math.cos(angle);
+let y=90+radius*Math.sin(angle);
+
+if(i===0)ctx.moveTo(x,y);
+else ctx.lineTo(x,y);
+}
+
+ctx.closePath();
+ctx.fill();
+t+=0.02;
+requestAnimationFrame(drawBlob);
+}
+drawBlob();
+
+/* MIC SYSTEM FIXED */
+if('webkitSpeechRecognition' in window){
 const recognition=new webkitSpeechRecognition();
 recognition.lang="en-IN";
 recognition.continuous=false;
 recognition.interimResults=false;
 
 micBtn.onclick=()=>{
-if(listening){recognition.stop();return;}
+if(listening){
+recognition.stop();
+return;
+}
 recognition.start();
-startBlob();
 listening=true;
 };
 
 recognition.onresult=e=>{
 let transcript=e.results[0][0].transcript;
 addMessage(transcript,"user");
-stopBlob();
+sendToBackend(transcript);
 listening=false;
 };
 
 recognition.onerror=()=>{
-stopBlob();
 listening=false;
 };
-}
 
-/* Liquid Blob Animation */
-function startBlob(){
-canvas.style.display="block";
-canvas.width=160;
-canvas.height=160;
-let t=0;
-
-function draw(){
-ctx.clearRect(0,0,160,160);
-ctx.fillStyle="rgba(255,60,0,0.6)";
-ctx.beginPath();
-for(let i=0;i<360;i++){
-let angle=i*Math.PI/180;
-let radius=60+10*Math.sin(angle*4+t);
-let x=80+radius*Math.cos(angle);
-let y=80+radius*Math.sin(angle);
-if(i===0)ctx.moveTo(x,y);
-else ctx.lineTo(x,y);
-}
-ctx.closePath();
-ctx.fill();
-t+=0.05;
-if(listening)requestAnimationFrame(draw);
-}
-draw();
-}
-
-function stopBlob(){
-canvas.style.display="none";
-ctx.clearRect(0,0,160,160);
+recognition.onend=()=>{
+listening=false;
+};
 }
 </script>
 
