@@ -95,11 +95,77 @@ def handle_reminder(user_text):
 
     text = user_text.lower()
 
-    # IN X MINUTES
-    match = re.search(r"remind me to (.+) in (\d+) minutes?", text)
+    # ---------- SHOW REMINDERS ----------
+    if "show my reminders" in text:
+        response = supabase.table("reminders") \
+            .select("*") \
+            .eq("user_id", "rishi") \
+            .eq("triggered", False) \
+            .execute()
+
+        if not response.data:
+            return "You have no active reminders."
+
+        msg = "Your active reminders:\n"
+        for r in response.data:
+            msg += f"ID {r['id']} → {r['text']} at {r['remind_at']}\n"
+
+        return msg
+
+    # ---------- DELETE REMINDER ----------
+    match = re.search(r"delete reminder (\d+)", text)
     if match:
-        task = match.group(1)
+        rid = int(match.group(1))
+        supabase.table("reminders") \
+            .delete() \
+            .eq("id", rid) \
+            .eq("user_id", "rishi") \
+            .execute()
+        return f"Reminder {rid} deleted."
+
+    # ---------- RENAME REMINDER ----------
+    match = re.search(r"rename reminder (\d+) to (.+)", text)
+    if match:
+        rid = int(match.group(1))
+        new_name = match.group(2)
+        supabase.table("reminders") \
+            .update({"text": new_name}) \
+            .eq("id", rid) \
+            .eq("user_id", "rishi") \
+            .execute()
+        return f"Reminder {rid} renamed."
+
+    # ---------- EDIT REMINDER TIME ----------
+    match = re.search(r"edit reminder (\d+) to (\d+) minutes?", text)
+    if match:
+        rid = int(match.group(1))
         minutes = int(match.group(2))
+        new_time = datetime.now() + timedelta(minutes=minutes)
+
+        supabase.table("reminders") \
+            .update({
+                "remind_at": new_time.isoformat(),
+                "triggered": False
+            }) \
+            .eq("id", rid) \
+            .eq("user_id", "rishi") \
+            .execute()
+
+        return f"Reminder {rid} updated."
+
+    # ---------- CREATE REMINDER ----------
+    match = re.search(r"remind me to (.+) in (\d+) minutes?", text)
+    if not match:
+        match = re.search(r"remind me in (\d+) minutes? to (.+)", text)
+
+    if match:
+        if text.index("to") < text.index("in"):
+            task = match.group(1)
+            minutes = int(match.group(2))
+        else:
+            minutes = int(match.group(1))
+            task = match.group(2)
+
         remind_time = datetime.now() + timedelta(minutes=minutes)
 
         supabase.table("reminders").insert({
@@ -110,65 +176,7 @@ def handle_reminder(user_text):
             "triggered": False
         }).execute()
 
-        return f"Okay. I’ll remind you in {minutes} minutes."
-
-    # SPECIFIC DATE
-    match = re.search(r"remind me on (\d{1,2})[./](\d{1,2})[./](\d{2,4}) at (\d{1,2}):?(\d{2})?\s?(am|pm)", text)
-    if match:
-        day = int(match.group(1))
-        month = int(match.group(2))
-        year = int(match.group(3))
-        hour = int(match.group(4))
-        minute = int(match.group(5) or 0)
-        ampm = match.group(6)
-
-        if year < 100:
-            year += 2000
-
-        if ampm == "pm" and hour != 12:
-            hour += 12
-        if ampm == "am" and hour == 12:
-            hour = 0
-
-        remind_time = datetime(year, month, day, hour, minute)
-
-        supabase.table("reminders").insert({
-            "user_id": "rishi",
-            "text": "Reminder",
-            "remind_at": remind_time.isoformat(),
-            "recurring": None,
-            "triggered": False
-        }).execute()
-
-        return "Reminder scheduled."
-
-    # DAILY
-    match = re.search(r"remind me everyday at (\d{1,2}):?(\d{2})?\s?(am|pm)", text)
-    if match:
-        hour = int(match.group(1))
-        minute = int(match.group(2) or 0)
-        ampm = match.group(3)
-
-        if ampm == "pm" and hour != 12:
-            hour += 12
-        if ampm == "am" and hour == 12:
-            hour = 0
-
-        now = datetime.now()
-        remind_time = now.replace(hour=hour, minute=minute, second=0)
-
-        if remind_time < now:
-            remind_time += timedelta(days=1)
-
-        supabase.table("reminders").insert({
-            "user_id": "rishi",
-            "text": "Daily reminder",
-            "remind_at": remind_time.isoformat(),
-            "recurring": "daily",
-            "triggered": False
-        }).execute()
-
-        return "Daily reminder set."
+        return f"Reminder created: {task}"
 
     return None
 
@@ -207,15 +215,10 @@ def check_reminder():
     if response.data:
         reminder = response.data[0]
 
-        if reminder["recurring"] == "daily":
-            next_time = datetime.fromisoformat(reminder["remind_at"]) + timedelta(days=1)
-            supabase.table("reminders").update({
-                "remind_at": next_time.isoformat()
-            }).eq("id", reminder["id"]).execute()
-        else:
-            supabase.table("reminders").update({
-                "triggered": True
-            }).eq("id", reminder["id"]).execute()
+        supabase.table("reminders") \
+            .update({"triggered": True}) \
+            .eq("id", reminder["id"]) \
+            .execute()
 
         return jsonify({"reminder": reminder["text"]})
 
