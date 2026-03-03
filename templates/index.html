@@ -116,7 +116,7 @@ left:0;
 width:100%;
 background:#111;
 padding:10px;
-display:none; /* hidden in mic mode by default */
+display:none;
 gap:8px;
 }
 
@@ -139,12 +139,12 @@ color:#fff;
 cursor:pointer;
 }
 
-/* THINNER TOGGLE TAB */
+/* TOGGLE TAB */
 .toggle-tab{
 position:fixed;
 top:20px;
 right:0;
-width:10px;   /* thinner */
+width:10px;
 height:45px;
 background:#ff3b00;
 border-radius:6px 0 0 6px;
@@ -234,13 +234,13 @@ toggleTab.onclick=()=>toggleDrawer.classList.toggle("open");
 
 function setMicMode(){
 micPanel.style.display="flex";
-keyboard.style.display="none";  /* hide keyboard */
+keyboard.style.display="none";
 toggleDrawer.classList.remove("open");
 }
 
 function setKeyboardMode(){
 micPanel.style.display="none";
-keyboard.style.display="flex";  /* show keyboard */
+keyboard.style.display="flex";
 toggleDrawer.classList.remove("open");
 }
 
@@ -277,29 +277,33 @@ const data=await res.json();
 addMessage(data.reply,"bot");
 }
 
-/* SMOOTHER BLOB (LESS WILD) */
+/* REMINDER CHECKER */
+setInterval(async ()=>{
+const res = await fetch("/check-reminder");
+const data = await res.json();
+if(data.reminder){
+addMessage("🔔 Reminder: " + data.reminder, "bot");
+alert("Reminder: " + data.reminder);
+}
+},15000);
+
+/* BLOB */
 function drawBlob(){
 ctx.clearRect(0,0,160,160);
 ctx.fillStyle="rgba(255,60,0,0.5)";
 ctx.beginPath();
-
 for(let i=0;i<360;i++){
 let angle=i*Math.PI/180;
 let base=listening?65:58;
-let radius=base
-+4*Math.sin(angle*2+t)   /* reduced intensity */
-+3*Math.sin(angle*3+t);
-
+let radius=base+4*Math.sin(angle*2+t)+3*Math.sin(angle*3+t);
 let x=80+radius*Math.cos(angle);
 let y=80+radius*Math.sin(angle);
-
 if(i===0)ctx.moveTo(x,y);
 else ctx.lineTo(x,y);
 }
-
 ctx.closePath();
 ctx.fill();
-t+=0.01;   /* slower */
+t+=0.01;
 requestAnimationFrame(drawBlob);
 }
 drawBlob();
