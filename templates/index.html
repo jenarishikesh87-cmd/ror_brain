@@ -13,74 +13,82 @@ height:100vh;
 overflow:hidden;
 display:flex;
 flex-direction:column;
+position:relative;
 }
 
-/* BACKGROUND RED GLOW */
+/* RED GLOW BACKGROUND */
 body::before{
 content:"";
 position:fixed;
 top:50%;
 left:50%;
 transform:translate(-50%,-50%);
-width:400px;
-height:400px;
-background:radial-gradient(circle,#ff000050 0%,transparent 70%);
-z-index:-1;
+width:500px;
+height:500px;
+background:radial-gradient(circle,#ff2a0050 0%,transparent 70%);
+z-index:-2;
 }
 
-/* LOGO CENTER */
+/* CENTER LOGO */
 .logo{
-position:absolute;
+position:fixed;
 top:50%;
 left:50%;
 transform:translate(-50%,-50%);
 width:180px;
-opacity:0.15;
-transition:0.3s ease;
-pointer-events:none;
+opacity:1;
+transition:opacity 0.5s ease;
+z-index:-1;
 }
 
-/* TOP RIGHT TOGGLE */
+/* TOGGLE SWITCH */
 .toggle{
-position:absolute;
+position:fixed;
 top:15px;
 right:15px;
+width:90px;
+height:40px;
+background:#111;
+border-radius:25px;
 display:flex;
 align-items:center;
-gap:10px;
-background:#111;
-padding:6px 12px;
-border-radius:30px;
+justify-content:space-between;
+padding:0 10px;
+cursor:pointer;
 border:1px solid #222;
 }
 
-.toggle button{
-background:none;
-border:none;
-color:#aaa;
-font-size:16px;
-cursor:pointer;
+.slider{
+position:absolute;
+width:40px;
+height:32px;
+background:#ff3b00;
+border-radius:20px;
+transition:0.3s ease;
 }
 
-.toggle button.active{
-color:#ff3b00;
+.icon{
+z-index:2;
+font-size:16px;
+color:#aaa;
 }
 
 /* CHAT AREA */
 .chat{
 flex:1;
 overflow-y:auto;
-padding:70px 15px 100px 15px;
+padding:70px 15px 120px 15px;
 display:flex;
 flex-direction:column;
 }
 
-.message{
+.bubble{
 max-width:75%;
-padding:10px 14px;
+padding:12px 15px;
 border-radius:18px;
 margin-bottom:5px;
 font-size:14px;
+position:relative;
 }
 
 .user{
@@ -96,49 +104,68 @@ background:#2a2a2a;
 .time{
 font-size:10px;
 color:#888;
-margin-bottom:12px;
+margin-top:4px;
+text-align:right;
 }
 
 /* MIC PANEL */
 .mic-panel{
-position:absolute;
-bottom:40px;
+position:fixed;
+bottom:60px;
 left:50%;
 transform:translateX(-50%);
-transition:0.3s ease;
+display:flex;
+justify-content:center;
+align-items:center;
 }
 
-.mic-btn{
-width:65px;
-height:65px;
+.mic{
+width:70px;
+height:70px;
 border-radius:50%;
 background:radial-gradient(circle,#ff3b00,#8b0000);
 display:flex;
 justify-content:center;
 align-items:center;
-box-shadow:0 0 20px #ff0000;
+box-shadow:0 0 25px #ff0000;
 position:relative;
 cursor:pointer;
 }
 
-.mic-btn::after{
-content:"";
+/* SIRI STYLE WAVE */
+.wave-container{
 position:absolute;
-width:100%;
-height:100%;
-border-radius:50%;
-border:2px solid #ff0000;
-animation:pulse 2s infinite;
+width:140px;
+height:140px;
+display:flex;
+justify-content:center;
+align-items:center;
+pointer-events:none;
 }
 
-@keyframes pulse{
-0%{transform:scale(1);opacity:0.8;}
-100%{transform:scale(1.8);opacity:0;}
+.wave-bar{
+width:6px;
+height:20px;
+margin:0 2px;
+background:linear-gradient(#ff3b00,#ff9900);
+border-radius:4px;
+animation:wave 1s infinite ease-in-out;
+}
+
+.wave-bar:nth-child(1){animation-delay:0s;}
+.wave-bar:nth-child(2){animation-delay:0.1s;}
+.wave-bar:nth-child(3){animation-delay:0.2s;}
+.wave-bar:nth-child(4){animation-delay:0.3s;}
+.wave-bar:nth-child(5){animation-delay:0.4s;}
+
+@keyframes wave{
+0%,100%{height:20px;}
+50%{height:60px;}
 }
 
 /* KEYBOARD PANEL */
-.keyboard-panel{
-position:absolute;
+.keyboard{
+position:fixed;
 bottom:0;
 left:0;
 width:100%;
@@ -150,7 +177,7 @@ transform:translateY(100%);
 transition:0.3s ease;
 }
 
-.keyboard-panel.active{
+.keyboard.active{
 transform:translateY(0);
 }
 
@@ -178,15 +205,24 @@ color:white;
 
 <img src="{{ url_for('static', filename='ror-logo.png') }}" class="logo" id="logo">
 
-<div class="toggle">
-<button id="micToggle" class="active">🎤</button>
-<button id="keyToggle">⌨️</button>
+<div class="toggle" id="toggle">
+<div class="slider" id="slider"></div>
+<span class="icon">🎤</span>
+<span class="icon">⌨️</span>
 </div>
 
 <div class="chat" id="chat"></div>
 
 <div class="mic-panel" id="micPanel">
-<div class="mic-btn" id="micBtn">
+<div class="wave-container" id="waves" style="display:none;">
+<div class="wave-bar"></div>
+<div class="wave-bar"></div>
+<div class="wave-bar"></div>
+<div class="wave-bar"></div>
+<div class="wave-bar"></div>
+</div>
+
+<div class="mic" id="micBtn">
 <svg width="22" height="22" fill="white" viewBox="0 0 24 24">
 <path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/>
 <path d="M19 11a7 7 0 01-14 0H3a9 9 0 0018 0h-2z"/>
@@ -194,52 +230,45 @@ color:white;
 </div>
 </div>
 
-<div class="keyboard-panel" id="keyboardPanel">
+<div class="keyboard" id="keyboard">
 <input type="text" id="input" placeholder="Type message...">
 <button class="send" onclick="sendMessage()">Send</button>
 </div>
 
 <script>
-const micToggle=document.getElementById("micToggle");
-const keyToggle=document.getElementById("keyToggle");
+const toggle=document.getElementById("toggle");
+const slider=document.getElementById("slider");
+const keyboard=document.getElementById("keyboard");
 const micPanel=document.getElementById("micPanel");
-const keyboardPanel=document.getElementById("keyboardPanel");
 const chat=document.getElementById("chat");
 const logo=document.getElementById("logo");
 const input=document.getElementById("input");
 const micBtn=document.getElementById("micBtn");
+const waves=document.getElementById("waves");
 
-function updateLogo(){
-logo.style.display=chat.children.length===0?"block":"none";
+let micMode=true;
+
+toggle.onclick=()=>{
+micMode=!micMode;
+if(micMode){
+slider.style.transform="translateX(0)";
+keyboard.classList.remove("active");
+micPanel.style.display="flex";
+}else{
+slider.style.transform="translateX(45px)";
+keyboard.classList.add("active");
+micPanel.style.display="none";
 }
+};
 
 function addMessage(text,type){
-const msg=document.createElement("div");
-msg.className="message "+type;
-msg.innerText=text;
-chat.appendChild(msg);
-
-const time=document.createElement("div");
-time.className="time";
-time.innerText="Sent · "+new Date().toLocaleTimeString();
-chat.appendChild(time);
-
+const bubble=document.createElement("div");
+bubble.className="bubble "+type;
+bubble.innerHTML=text+"<div class='time'>Sent · "+new Date().toLocaleTimeString()+"</div>";
+chat.appendChild(bubble);
 chat.scrollTop=chat.scrollHeight;
-updateLogo();
+logo.style.opacity=0;
 }
-
-micToggle.onclick=()=>{
-micToggle.classList.add("active");
-keyToggle.classList.remove("active");
-keyboardPanel.classList.remove("active");
-};
-
-keyToggle.onclick=()=>{
-keyToggle.classList.add("active");
-micToggle.classList.remove("active");
-keyboardPanel.classList.add("active");
-input.focus();
-};
 
 async function sendMessage(){
 if(!input.value.trim())return;
@@ -258,22 +287,32 @@ const data=await res.json();
 addMessage(data.reply,"bot");
 
 const speech=new SpeechSynthesisUtterance(data.reply);
-speech.lang="en-IN";
+speech.lang="hi-IN";
 window.speechSynthesis.speak(speech);
 }
 
 if('webkitSpeechRecognition'in window){
 const recognition=new webkitSpeechRecognition();
-recognition.lang="en-IN";
+recognition.lang="hi-IN";
+recognition.continuous=false;
+recognition.interimResults=false;
+
+micBtn.onclick=()=>{
+waves.style.display="flex";
+recognition.start();
+};
+
 recognition.onresult=e=>{
+waves.style.display="none";
 const transcript=e.results[0][0].transcript;
 addMessage(transcript,"user");
 sendToBackend(transcript);
 };
-micBtn.onclick=()=>recognition.start();
-}
 
-updateLogo();
+recognition.onerror=()=>{
+waves.style.display="none";
+};
+}
 </script>
 
 </body>
