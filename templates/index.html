@@ -40,7 +40,7 @@ transition:.4s ease;
 z-index:-1;
 }
 
-/* CHAT FROM TOP */
+/* CHAT */
 .chat{
 position:absolute;
 top:0;
@@ -136,6 +136,48 @@ border:none;
 border-radius:25px;
 background:#ff3b00;
 color:#fff;
+cursor:pointer;
+}
+
+/* TOGGLE TAB */
+.toggle-tab{
+position:fixed;
+top:20px;
+right:0;
+width:18px;
+height:50px;
+background:#ff3b00;
+border-radius:8px 0 0 8px;
+z-index:500;
+cursor:pointer;
+}
+
+/* TOGGLE DRAWER */
+.toggle-drawer{
+position:fixed;
+top:20px;
+right:-130px;
+width:130px;
+height:50px;
+background:#111;
+border-radius:25px 0 0 25px;
+display:flex;
+align-items:center;
+justify-content:space-around;
+transition:.3s ease;
+z-index:499;
+}
+
+.toggle-drawer.open{
+right:0;
+}
+
+.toggle-drawer button{
+background:none;
+border:none;
+color:white;
+font-size:18px;
+cursor:pointer;
 }
 </style>
 </head>
@@ -144,9 +186,17 @@ color:#fff;
 
 <img src="{{ url_for('static', filename='ror-logo.png') }}" class="logo" id="logo">
 
+<!-- TOGGLE -->
+<div class="toggle-tab" id="toggleTab"></div>
+
+<div class="toggle-drawer" id="toggleDrawer">
+<button onclick="setMicMode()">🎤</button>
+<button onclick="setKeyboardMode()">⌨️</button>
+</div>
+
 <div class="chat" id="chat"></div>
 
-<div class="mic-panel">
+<div class="mic-panel" id="micPanel">
 
 <canvas class="blob" id="blobCanvas"></canvas>
 
@@ -159,7 +209,7 @@ color:#fff;
 
 </div>
 
-<div class="keyboard">
+<div class="keyboard" id="keyboard">
 <input type="text" id="input">
 <button class="send" onclick="sendMessage()">Send</button>
 </div>
@@ -171,12 +221,30 @@ const micBtn=document.getElementById("micBtn");
 const input=document.getElementById("input");
 const canvas=document.getElementById("blobCanvas");
 const ctx=canvas.getContext("2d");
+const toggleTab=document.getElementById("toggleTab");
+const toggleDrawer=document.getElementById("toggleDrawer");
+const micPanel=document.getElementById("micPanel");
+const keyboard=document.getElementById("keyboard");
 
 canvas.width=180;
 canvas.height=180;
 
 let listening=false;
 let t=0;
+
+/* TOGGLE */
+toggleTab.onclick=()=>toggleDrawer.classList.toggle("open");
+
+function setMicMode(){
+micPanel.style.display="flex";
+keyboard.style.display="flex";
+toggleDrawer.classList.remove("open");
+}
+
+function setKeyboardMode(){
+micPanel.style.display="none";
+toggleDrawer.classList.remove("open");
+}
 
 /* MESSAGES */
 function addMessage(text,type){
@@ -211,7 +279,7 @@ const data=await res.json();
 addMessage(data.reply,"bot");
 }
 
-/* LIQUID BLOB ALWAYS ANIMATED */
+/* BLOB ANIMATION */
 function drawBlob(){
 ctx.clearRect(0,0,180,180);
 ctx.fillStyle="rgba(255,60,0,0.6)";
@@ -219,7 +287,7 @@ ctx.beginPath();
 
 for(let i=0;i<720;i++){
 let angle=i*Math.PI/360;
-let base= listening ? 75 : 60;
+let base=listening?75:60;
 let radius=base
 +8*Math.sin(angle*2+t)
 +5*Math.sin(angle*5+t*1.2);
@@ -238,37 +306,27 @@ requestAnimationFrame(drawBlob);
 }
 drawBlob();
 
-/* MIC SYSTEM FIXED */
-if('webkitSpeechRecognition' in window){
+/* STABLE MIC SYSTEM */
+micBtn.onclick=()=>{
+if(!('webkitSpeechRecognition' in window)) return;
+
 const recognition=new webkitSpeechRecognition();
 recognition.lang="en-IN";
 recognition.continuous=false;
 recognition.interimResults=false;
 
-micBtn.onclick=()=>{
-if(listening){
-recognition.stop();
-return;
-}
 recognition.start();
 listening=true;
-};
 
 recognition.onresult=e=>{
 let transcript=e.results[0][0].transcript;
 addMessage(transcript,"user");
 sendToBackend(transcript);
-listening=false;
 };
 
-recognition.onerror=()=>{
-listening=false;
+recognition.onerror=()=>{listening=false;};
+recognition.onend=()=>{listening=false;};
 };
-
-recognition.onend=()=>{
-listening=false;
-};
-}
 </script>
 
 </body>
