@@ -1,9 +1,7 @@
 import os
 import requests
 import re
-import threading
-import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template
 from supabase import create_client
 
@@ -34,19 +32,6 @@ def save_memory(text, category):
         "category": category,
         "content": text
     }).execute()
-
-# ---------------- REMINDER SYSTEM ----------------
-reminders = []
-
-def reminder_checker():
-    while True:
-        now = datetime.now().strftime("%H:%M")
-        for r in reminders:
-            if not r["triggered"] and r["time"] == now:
-                r["triggered"] = True
-        time.sleep(20)
-
-threading.Thread(target=reminder_checker, daemon=True).start()
 
 # ---------------- ROR BRAIN ----------------
 def ror_brain(user_text):
@@ -105,6 +90,88 @@ REPLY: <actual reply>
 
     return reply
 
+# ---------------- REMINDER HANDLER ----------------
+def handle_reminder(user_text):
+
+    text = user_text.lower()
+
+    # IN X MINUTES
+    match = re.search(r"remind me to (.+) in (\d+) minutes?", text)
+    if match:
+        task = match.group(1)
+        minutes = int(match.group(2))
+        remind_time = datetime.now() + timedelta(minutes=minutes)
+
+        supabase.table("reminders").insert({
+            "user_id": "rishi",
+            "text": task,
+            "remind_at": remind_time.isoformat(),
+            "recurring": None,
+            "triggered": False
+        }).execute()
+
+        return f"Okay. I’ll remind you in {minutes} minutes."
+
+    # SPECIFIC DATE
+    match = re.search(r"remind me on (\d{1,2})[./](\d{1,2})[./](\d{2,4}) at (\d{1,2}):?(\d{2})?\s?(am|pm)", text)
+    if match:
+        day = int(match.group(1))
+        month = int(match.group(2))
+        year = int(match.group(3))
+        hour = int(match.group(4))
+        minute = int(match.group(5) or 0)
+        ampm = match.group(6)
+
+        if year < 100:
+            year += 2000
+
+        if ampm == "pm" and hour != 12:
+            hour += 12
+        if ampm == "am" and hour == 12:
+            hour = 0
+
+        remind_time = datetime(year, month, day, hour, minute)
+
+        supabase.table("reminders").insert({
+            "user_id": "rishi",
+            "text": "Reminder",
+            "remind_at": remind_time.isoformat(),
+            "recurring": None,
+            "triggered": False
+        }).execute()
+
+        return "Reminder scheduled."
+
+    # DAILY
+    match = re.search(r"remind me everyday at (\d{1,2}):?(\d{2})?\s?(am|pm)", text)
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2) or 0)
+        ampm = match.group(3)
+
+        if ampm == "pm" and hour != 12:
+            hour += 12
+        if ampm == "am" and hour == 12:
+            hour = 0
+
+        now = datetime.now()
+        remind_time = now.replace(hour=hour, minute=minute, second=0)
+
+        if remind_time < now:
+            remind_time += timedelta(days=1)
+
+        supabase.table("reminders").insert({
+            "user_id": "rishi",
+            "text": "Daily reminder",
+            "remind_at": remind_time.isoformat(),
+            "recurring": "daily",
+            "triggered": False
+        }).execute()
+
+        return "Daily reminder set."
+
+    return None
+
 # ---------------- ROUTES ----------------
 @app.route("/")
 def home():
@@ -118,44 +185,40 @@ def chat():
     if not user_text:
         return jsonify({"reply": "Say something."})
 
-    # --------- REMINDER DETECTION ---------
-    reminder_pattern = r"remind me at (\d{1,2})(?::(\d{2}))?\s?(am|pm) to (.+)"
-    match = re.search(reminder_pattern, user_text.lower())
+    reminder_reply = handle_reminder(user_text)
+    if reminder_reply:
+        return jsonify({"reply": reminder_reply})
 
-    if match:
-        hour = int(match.group(1))
-        minute = int(match.group(2)) if match.group(2) else 0
-        ampm = match.group(3)
-        task = match.group(4)
-
-        if ampm == "pm" and hour != 12:
-            hour += 12
-        if ampm == "am" and hour == 12:
-            hour = 0
-
-        reminder_time = f"{hour:02d}:{minute:02d}"
-
-        reminders.append({
-            "time": reminder_time,
-            "text": task,
-            "triggered": False
-        })
-
-        return jsonify({
-            "reply": f"Reminder set at {match.group(1)}:{minute:02d} {ampm.upper()} to {task}"
-        })
-
-    # -------- NORMAL BRAIN --------
     reply = ror_brain(user_text)
     return jsonify({"reply": reply})
 
-
 @app.route("/check-reminder")
 def check_reminder():
-    for r in reminders:
-        if r["triggered"]:
-            r["triggered"] = False
-            return jsonify({"reminder": r["text"]})
+
+    now = datetime.now().isoformat()
+
+    response = supabase.table("reminders") \
+        .select("*") \
+        .eq("user_id", "rishi") \
+        .lte("remind_at", now) \
+        .eq("triggered", False) \
+        .execute()
+
+    if response.data:
+        reminder = response.data[0]
+
+        if reminder["recurring"] == "daily":
+            next_time = datetime.fromisoformat(reminder["remind_at"]) + timedelta(days=1)
+            supabase.table("reminders").update({
+                "remind_at": next_time.isoformat()
+            }).eq("id", reminder["id"]).execute()
+        else:
+            supabase.table("reminders").update({
+                "triggered": True
+            }).eq("id", reminder["id"]).execute()
+
+        return jsonify({"reminder": reminder["text"]})
+
     return jsonify({"reminder": None})
 
 # ---------------- START ----------------
