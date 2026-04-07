@@ -224,10 +224,6 @@ def check_reminder():
 
     return jsonify({"reminder": None})
 
-# ---------------- START ----------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
 #-------------
 @app.route("/ror-trade", methods=["GET"])
 def ror_trade():
@@ -235,3 +231,7 @@ def ror_trade():
         "status": "Trading module ready",
         "message": "ROR trading not connected yet"
     }
+# ---------------- START ----------------
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
