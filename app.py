@@ -228,3 +228,10 @@ def check_reminder():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+#-------------
+@app.route("/ror-trade", methods=["GET"])
+def ror_trade():
+    return {
+        "status": "Trading module ready",
+        "message": "ROR trading not connected yet"
+    }
