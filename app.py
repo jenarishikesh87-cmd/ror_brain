@@ -233,6 +233,15 @@ def ror_trade():
         url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
         res = requests.get(url).json()
 
+        # Debug print (optional)
+        print(res)
+
+        if "price" not in res:
+            return {
+                "status": "error",
+                "api_response": res
+            }
+
         price = float(res["price"])
 
         return {
