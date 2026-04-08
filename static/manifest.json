@@ -1,0 +1,20 @@
+{
+  "name": "ROR AI",
+  "short_name": "ROR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#ff004c",
+  "icons": [
+    {
+      "src": "/static/ror-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/ror-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
