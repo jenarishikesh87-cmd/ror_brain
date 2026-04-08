@@ -226,14 +226,16 @@ def check_reminder():
 
 #-------------TRADE--------------
 import requests
+import json
 
 @app.route("/ror-trade", methods=["GET"])
 def ror_trade():
     try:
+        # 🔹 Get BTC price from CoinGecko
         url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
         res = requests.get(url).json()
 
-        # Check if response is valid
+        # 🔹 Safety check
         if "bitcoin" not in res:
             return {
                 "status": "error",
@@ -242,23 +244,33 @@ def ror_trade():
 
         price = res["bitcoin"]["usd"]
 
-        # ROR thinking
+        # 🔹 ROR prompt (STRICT JSON OUTPUT)
         prompt = f"""
         You are ROR, an intelligent trading assistant.
 
         Current BTC price: {price}
 
-        Decide:
-        BUY / SELL / HOLD
-        Confidence (0-100)
-        Reason
+        Analyze and respond ONLY in this JSON format:
+        {{
+          "decision": "BUY or SELL or HOLD",
+          "confidence": number (0-100),
+          "reason": "short explanation"
+        }}
         """
 
+        # 🔹 Call your existing ROR brain
         decision = ror_brain(prompt)
 
+        # 🔹 Convert AI response to JSON
+        try:
+            parsed = json.loads(decision)
+        except:
+            parsed = {"raw": decision}
+
+        # 🔹 Final response
         return {
             "price": price,
-            "analysis": decision
+            "analysis": parsed
         }
 
     except Exception as e:
