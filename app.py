@@ -154,6 +154,77 @@ def place_order():
 
     return jsonify(res)
 
+# ---------------- CONFIRM ORDER (FROM AI SIGNAL) ----------------
+@app.route("/prepare-order", methods=["POST"])
+def prepare_order():
+    data = request.json
+
+    return jsonify({
+        "asset": data["asset"],
+        "decision": data["decision"],
+        "entry": data["entry"],
+        "qty": 1   # you can later make dynamic
+    })
+
+
+# ---------------- EXECUTE ORDER (UPSTOX) ----------------
+@app.route("/execute-order", methods=["POST"])
+def execute_order():
+    global UPSTOX_TOKEN
+
+    if not UPSTOX_TOKEN:
+        return jsonify({"error": "Upstox not connected"})
+
+    data = request.json
+
+    payload = {
+        "quantity": data["qty"],
+        "product": "D",
+        "validity": "DAY",
+        "price": data["price"],
+        "tag": "ROR",
+        "instrument_token": data["instrument"],
+        "order_type": "LIMIT",
+        "transaction_type": data["type"],
+        "disclosed_quantity": 0,
+        "trigger_price": 0,
+        "is_amo": False
+    }
+
+    res = requests.post(
+        "https://api.upstox.com/v2/order/place",
+        headers={
+            "Authorization": f"Bearer {UPSTOX_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json=payload
+    ).json()
+
+    return jsonify(res)
+
+
+# ---------------- PORTFOLIO ----------------
+@app.route("/portfolio")
+def portfolio():
+    token = UPSTOX_TOKEN
+
+    if not token:
+        return jsonify({"error": "Connect Upstox first"})
+
+    pos = requests.get(
+        "https://api.upstox.com/v2/portfolio/short-term-positions",
+        headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    funds = requests.get(
+        "https://api.upstox.com/v2/user/get-funds-and-margin",
+        headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    return jsonify({
+        "positions": pos,
+        "funds": funds
+    })
 # ---------------- START ----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT",10000))
