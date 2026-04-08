@@ -2,7 +2,7 @@ import os
 import requests
 import re
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect
 from supabase import create_client
 
 app = Flask(__name__)
@@ -12,7 +12,14 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
 
+UPSTOX_API_KEY = os.getenv("UPSTOX_API_KEY")
+UPSTOX_SECRET = os.getenv("UPSTOX_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ---------------- STORE TOKEN ----------------
+UPSTOX_TOKEN = None
 
 # ---------------- ROR ----------------
 def ror_brain(text):
@@ -26,7 +33,7 @@ def ror_brain(text):
             json={
                 "model": "openai/gpt-4o-mini",
                 "messages": [
-                    {"role": "system", "content": "You are a professional trading assistant."},
+                    {"role": "system", "content": "You are a trading assistant."},
                     {"role": "user", "content": text}
                 ]
             }
@@ -34,24 +41,7 @@ def ror_brain(text):
 
         return res["choices"][0]["message"]["content"]
     except:
-        return "Analysis unavailable."
-
-# ---------------- TRADE MEMORY ----------------
-def save_trade(asset, decision, entry, tp, sl):
-    supabase.table("trades").insert({
-        "user_id":"rishi",
-        "asset":asset,
-        "decision":decision,
-        "entry":entry,
-        "tp":tp,
-        "sl":sl
-    }).execute()
-
-# ---------------- REMINDER ----------------
-def handle_reminder(text):
-    if "remind me" in text.lower():
-        return "Reminder system active."
-    return None
+        return "Analysis failed."
 
 # ---------------- ROUTES ----------------
 @app.route("/")
@@ -60,166 +50,109 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    msg = request.json.get("message","").strip()
+    msg = request.json.get("message","")
+    return jsonify({"reply": ror_brain(msg)})
 
-    r = handle_reminder(msg)
-    if r:
-        return jsonify({"reply":r})
+# ---------------- UPSTOX LOGIN ----------------
+@app.route("/upstox-login")
+def upstox_login():
+    url = f"https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id={UPSTOX_API_KEY}&redirect_uri={REDIRECT_URI}"
+    return redirect(url)
 
-    return jsonify({"reply":ror_brain(msg)})
+# ---------------- CALLBACK ----------------
+@app.route("/callback")
+def callback():
+    global UPSTOX_TOKEN
 
-# ---------------- MAIN TRADING ENGINE ----------------
-@app.route("/ror-trade/<asset>")
-def ror_trade(asset):
-    try:
-        asset = asset.lower()
+    code = request.args.get("code")
 
-        # -------- FETCH DATA --------
-        if asset in ["bitcoin","ethereum","solana"]:
-            url = f"https://api.coingecko.com/api/v3/coins/{asset}/market_chart"
-            data = requests.get(url, params={"vs_currency":"usd","days":1}).json()
-            prices = [p[1] for p in data["prices"]]
+    res = requests.post(
+        "https://api.upstox.com/v2/login/authorization/token",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "code": code,
+            "client_id": UPSTOX_API_KEY,
+            "client_secret": UPSTOX_SECRET,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code"
+        }
+    ).json()
 
-        else:
-            # STOCK (TwelveData)
-            stock = asset.upper()
-            res = requests.get(f"https://api.twelvedata.com/time_series?symbol={stock}&interval=5min&apikey=demo").json()
-            prices = [float(x["close"]) for x in res["values"]][::-1]
+    UPSTOX_TOKEN = res.get("access_token")
 
-        current = prices[-1]
+    return "✅ Upstox Connected! You can go back."
 
-        # -------- EMA --------
-        def ema(data, period):
-            k = 2/(period+1)
-            val = data[0]
-            for p in data[1:]:
-                val = p*k + val*(1-k)
-            return val
+# ---------------- FETCH PROFILE ----------------
+@app.route("/upstox-profile")
+def profile():
+    if not UPSTOX_TOKEN:
+        return jsonify({"error":"Not connected"})
 
-        ema_fast = ema(prices[-30:], 9)
-        ema_mid = ema(prices[-60:], 21)
+    res = requests.get(
+        "https://api.upstox.com/v2/user/profile",
+        headers={"Authorization": f"Bearer {UPSTOX_TOKEN}"}
+    ).json()
 
-        # -------- RSI --------
-        def rsi(data):
-            gains, losses = [], []
-            for i in range(1,15):
-                d = data[-i] - data[-i-1]
-                if d>0: gains.append(d)
-                else: losses.append(abs(d))
-            g = sum(gains)/14 if gains else 0.001
-            l = sum(losses)/14 if losses else 0.001
-            return 100-(100/(1+(g/l)))
+    return jsonify(res)
 
-        rsi_val = rsi(prices)
+# ---------------- FETCH FUNDS ----------------
+@app.route("/upstox-funds")
+def funds():
+    if not UPSTOX_TOKEN:
+        return jsonify({"error":"Not connected"})
 
-        # -------- MOMENTUM --------
-        momentum = (prices[-1] - prices[-5]) / prices[-5] * 100
+    res = requests.get(
+        "https://api.upstox.com/v2/user/get-funds-and-margin",
+        headers={"Authorization": f"Bearer {UPSTOX_TOKEN}"}
+    ).json()
 
-        # -------- VOLUME (PROXY) --------
-        volume_strength = abs(momentum)
+    return jsonify(res)
 
-        # -------- ORDERBOOK (BINANCE) --------
-        liquidity = 0
-        try:
-            symbol = asset.upper() + "USDT"
-            ob = requests.get(f"https://api.binance.com/api/v3/depth?symbol={symbol}&limit=5").json()
-            bids = sum([float(b[1]) for b in ob["bids"]])
-            asks = sum([float(a[1]) for a in ob["asks"]])
-            liquidity = bids - asks
-        except:
-            pass
+# ---------------- FETCH POSITIONS ----------------
+@app.route("/upstox-positions")
+def positions():
+    if not UPSTOX_TOKEN:
+        return jsonify({"error":"Not connected"})
 
-        # -------- MULTI TIMEFRAME --------
-        fast_trend = ema_fast > ema_mid
-        mid_trend = ema(prices[-80:], 21) > ema(prices[-120:], 50)
+    res = requests.get(
+        "https://api.upstox.com/v2/portfolio/short-term-positions",
+        headers={"Authorization": f"Bearer {UPSTOX_TOKEN}"}
+    ).json()
 
-        # -------- SESSION --------
-        hour = datetime.utcnow().hour
-        session = "ASIA"
-        if 7 <= hour <= 15:
-            session = "LONDON"
-        elif 13 <= hour <= 22:
-            session = "NEW YORK"
+    return jsonify(res)
 
-        # -------- STRUCTURE --------
-        support = min(prices[-50:])
-        resistance = max(prices[-50:])
+# ---------------- SIMPLE TRADE (SAFE) ----------------
+@app.route("/upstox-order", methods=["POST"])
+def place_order():
+    if not UPSTOX_TOKEN:
+        return jsonify({"error":"Not connected"})
 
-        # -------- SCORING --------
-        score = 0
-        signals = []
+    data = request.json
 
-        if rsi_val < 30:
-            score += 2; signals.append("Oversold")
-        elif rsi_val > 70:
-            score -= 2; signals.append("Overbought")
+    payload = {
+        "quantity": data.get("qty"),
+        "product": "D",
+        "validity": "DAY",
+        "price": data.get("price"),
+        "tag": "ROR",
+        "instrument_token": data.get("instrument"),
+        "order_type": "LIMIT",
+        "transaction_type": data.get("type"),  # BUY / SELL
+        "disclosed_quantity": 0,
+        "trigger_price": 0,
+        "is_amo": False
+    }
 
-        if fast_trend and mid_trend:
-            score += 2; signals.append("Trend aligned")
-        else:
-            score -= 1
+    res = requests.post(
+        "https://api.upstox.com/v2/order/place",
+        headers={
+            "Authorization": f"Bearer {UPSTOX_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json=payload
+    ).json()
 
-        if momentum > 0.5:
-            score += 1; signals.append("Momentum Up")
-        elif momentum < -0.5:
-            score -= 1; signals.append("Momentum Down")
-
-        if liquidity > 0:
-            score += 1; signals.append("Buy pressure")
-        elif liquidity < 0:
-            score -= 1; signals.append("Sell pressure")
-
-        if session == "NEW YORK":
-            score += 1; signals.append("High volume session")
-
-        # -------- DECISION --------
-        if score >= 4:
-            decision = "BUY"
-        elif score <= -4:
-            decision = "SELL"
-        else:
-            decision = "HOLD"
-
-        confidence = min(95, abs(score)*15 + 40)
-
-        # -------- RISK --------
-        entry = current
-        tp = resistance if decision=="BUY" else support
-        sl = support if decision=="BUY" else resistance
-
-        # SAVE TRADE
-        if decision != "HOLD":
-            save_trade(asset, decision, entry, tp, sl)
-
-        # -------- AI EXPLANATION --------
-        explanation = ror_brain(f"""
-Asset {asset}
-RSI {rsi_val:.2f}
-Momentum {momentum:.2f}
-Liquidity {liquidity}
-Session {session}
-Signals {signals}
-Decision {decision}
-
-Explain briefly.
-""")
-
-        return jsonify({
-            "price": round(entry,2),
-            "analysis":{
-                "decision":decision,
-                "confidence":int(confidence),
-                "reason":explanation,
-                "entry":round(entry,2),
-                "tp":round(tp,2),
-                "sl":round(sl,2),
-                "signals":signals,
-                "session":session
-            }
-        })
-
-    except Exception as e:
-        return jsonify({"error":str(e)})
+    return jsonify(res)
 
 # ---------------- START ----------------
 if __name__ == "__main__":
