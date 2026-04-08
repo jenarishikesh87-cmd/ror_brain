@@ -1,19 +1,20 @@
-self.addEventListener("install", e=>{
-  e.waitUntil(
-    caches.open("ror-cache").then(cache=>{
-      return cache.addAll([
-        "/",
-        "/static/style.css",
-        "/static/app.js"
-      ]);
-    })
-  );
+self.addEventListener("install", e => {
+  self.skipWaiting();
 });
 
-self.addEventListener("fetch", e=>{
-  e.respondWith(
-    caches.match(e.request).then(res=>{
-      return res || fetch(e.request);
+self.addEventListener("activate", e => {
+  console.log("Service Worker Active");
+});
+
+// 🔔 PUSH EVENT (REAL NOTIFICATIONS)
+self.addEventListener("push", function(event) {
+  const data = event.data ? event.data.text() : "ROR Notification";
+
+  event.waitUntil(
+    self.registration.showNotification("ROR", {
+      body: data,
+      icon: "/static/ror-logo.png",
+      badge: "/static/ror-logo.png"
     })
   );
 });
