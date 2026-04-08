@@ -1,6 +1,7 @@
 import os
 import requests
 import re
+import json
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template
 from supabase import create_client
@@ -95,7 +96,7 @@ def handle_reminder(user_text):
 
     text = user_text.lower()
 
-    # ---------- SHOW REMINDERS ----------
+    # SHOW
     if "show my reminders" in text:
         response = supabase.table("reminders") \
             .select("*") \
@@ -106,13 +107,12 @@ def handle_reminder(user_text):
         if not response.data:
             return "You have no active reminders."
 
-        msg = "Your active reminders:\n"
+        msg = "Your reminders:\n"
         for r in response.data:
             msg += f"ID {r['id']} → {r['text']} at {r['remind_at']}\n"
-
         return msg
 
-    # ---------- DELETE REMINDER ----------
+    # DELETE
     match = re.search(r"delete reminder (\d+)", text)
     if match:
         rid = int(match.group(1))
@@ -123,48 +123,25 @@ def handle_reminder(user_text):
             .execute()
         return f"Reminder {rid} deleted."
 
-    # ---------- RENAME REMINDER ----------
+    # RENAME
     match = re.search(r"rename reminder (\d+) to (.+)", text)
     if match:
         rid = int(match.group(1))
         new_name = match.group(2)
+
         supabase.table("reminders") \
             .update({"text": new_name}) \
             .eq("id", rid) \
             .eq("user_id", "rishi") \
             .execute()
+
         return f"Reminder {rid} renamed."
 
-    # ---------- EDIT REMINDER TIME ----------
-    match = re.search(r"edit reminder (\d+) to (\d+) minutes?", text)
+    # CREATE
+    match = re.search(r"remind me in (\d+) minutes? to (.+)", text)
     if match:
-        rid = int(match.group(1))
-        minutes = int(match.group(2))
-        new_time = datetime.now() + timedelta(minutes=minutes)
-
-        supabase.table("reminders") \
-            .update({
-                "remind_at": new_time.isoformat(),
-                "triggered": False
-            }) \
-            .eq("id", rid) \
-            .eq("user_id", "rishi") \
-            .execute()
-
-        return f"Reminder {rid} updated."
-
-    # ---------- CREATE REMINDER ----------
-    match = re.search(r"remind me to (.+) in (\d+) minutes?", text)
-    if not match:
-        match = re.search(r"remind me in (\d+) minutes? to (.+)", text)
-
-    if match:
-        if text.index("to") < text.index("in"):
-            task = match.group(1)
-            minutes = int(match.group(2))
-        else:
-            minutes = int(match.group(1))
-            task = match.group(2)
+        minutes = int(match.group(1))
+        task = match.group(2)
 
         remind_time = datetime.now() + timedelta(minutes=minutes)
 
@@ -172,11 +149,10 @@ def handle_reminder(user_text):
             "user_id": "rishi",
             "text": task,
             "remind_at": remind_time.isoformat(),
-            "recurring": None,
             "triggered": False
         }).execute()
 
-        return f"Reminder created: {task}"
+        return f"Reminder set for {task}"
 
     return None
 
@@ -202,7 +178,6 @@ def chat():
 
 @app.route("/check-reminder")
 def check_reminder():
-
     now = datetime.now().isoformat()
 
     response = supabase.table("reminders") \
@@ -224,65 +199,58 @@ def check_reminder():
 
     return jsonify({"reminder": None})
 
-#-------------TRADE--------------
-import requests
-import json
-
+# ---------------- TRADE ----------------
 @app.route("/ror-trade", methods=["GET"])
 def ror_trade():
     try:
         price = None
 
-        # 🔹 Try CoinGecko
+        # CoinGecko
         try:
-            url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-            res = requests.get(url).json()
-
-            if "bitcoin" in res:
-                price = res["bitcoin"]["usd"]
-
+            res = requests.get(
+                "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+            ).json()
+            price = res["bitcoin"]["usd"]
         except:
             pass
 
-        # 🔹 Fallback API (CoinCap)
+        # Fallback
         if price is None:
-            try:
-                url = "https://api.coincap.io/v2/assets/bitcoin"
-                res = requests.get(url).json()
+            res = requests.get("https://api.coincap.io/v2/assets/bitcoin").json()
+            price = float(res["data"]["priceUsd"])
 
-                price = float(res["data"]["priceUsd"])
-
-            except:
-                return {"error": "All APIs failed"}
-
-        # 🔹 ROR thinking
+        # ROR decision
         prompt = f"""
-        You are ROR, an intelligent trading assistant.
+You are an intelligent trading assistant.
 
-        Current BTC price: {price}
+BTC price: {price}
 
-        Respond ONLY in JSON:
-        {{
-          "decision": "BUY or SELL or HOLD",
-          "confidence": number (0-100),
-          "reason": "short explanation"
-        }}
-        """
+Respond ONLY in JSON:
+{{
+"decision":"BUY/SELL/HOLD",
+"confidence":number,
+"reason":"short reason"
+}}
+"""
 
         decision = ror_brain(prompt)
 
         try:
             parsed = json.loads(decision)
         except:
-            parsed = {"raw": decision}
+            parsed = {
+                "decision": "HOLD",
+                "confidence": 50,
+                "reason": "Parsing failed"
+            }
 
-        return {
+        return jsonify({
             "price": price,
             "analysis": parsed
-        }
+        })
 
     except Exception as e:
-        return {"error": str(e)}
+        return jsonify({"error": str(e)})
 
 # ---------------- START ----------------
 if __name__ == "__main__":
