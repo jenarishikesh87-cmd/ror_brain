@@ -231,26 +231,37 @@ import json
 @app.route("/ror-trade", methods=["GET"])
 def ror_trade():
     try:
-        # 🔹 Get BTC price from CoinGecko
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-        res = requests.get(url).json()
+        price = None
 
-        # 🔹 Safety check
-        if "bitcoin" not in res:
-            return {
-                "status": "error",
-                "api_response": res
-            }
+        # 🔹 Try CoinGecko
+        try:
+            url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+            res = requests.get(url).json()
 
-        price = res["bitcoin"]["usd"]
+            if "bitcoin" in res:
+                price = res["bitcoin"]["usd"]
 
-        # 🔹 ROR prompt (STRICT JSON OUTPUT)
+        except:
+            pass
+
+        # 🔹 Fallback API (CoinCap)
+        if price is None:
+            try:
+                url = "https://api.coincap.io/v2/assets/bitcoin"
+                res = requests.get(url).json()
+
+                price = float(res["data"]["priceUsd"])
+
+            except:
+                return {"error": "All APIs failed"}
+
+        # 🔹 ROR thinking
         prompt = f"""
         You are ROR, an intelligent trading assistant.
 
         Current BTC price: {price}
 
-        Analyze and respond ONLY in this JSON format:
+        Respond ONLY in JSON:
         {{
           "decision": "BUY or SELL or HOLD",
           "confidence": number (0-100),
@@ -258,16 +269,13 @@ def ror_trade():
         }}
         """
 
-        # 🔹 Call your existing ROR brain
         decision = ror_brain(prompt)
 
-        # 🔹 Convert AI response to JSON
         try:
             parsed = json.loads(decision)
         except:
             parsed = {"raw": decision}
 
-        # 🔹 Final response
         return {
             "price": price,
             "analysis": parsed
