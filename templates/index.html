@@ -4,262 +4,197 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ROR</title>
 
-<script src="https://s3.tradingview.com/tv.js"></script>
+<link rel="stylesheet" href="/static/style.css">
 
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui;}
-body{background:#000;color:#fff;height:100vh;overflow:hidden;}
-
-.chat{
-position:absolute;
-top:0;left:0;right:0;bottom:200px;
-overflow-y:auto;
-padding:20px;
-display:flex;
-flex-direction:column;
+/* FLOATING BUBBLE */
+.floating-container{
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  z-index: 999;
 }
 
-.bubble{
-max-width:75%;
-padding:12px;
-border-radius:18px;
-margin-bottom:5px;
-font-size:14px;
+.main-bubble{
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #ff0033;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-size:22px;
+  color:white;
+  cursor:pointer;
+  box-shadow:0 0 20px red;
 }
 
-.user{align-self:flex-end;background:#1c1c1c;}
-.bot{align-self:flex-start;background:#2a2a2a;}
-
-#trading-box{
-display:none;
-position:absolute;
-top:0;left:0;right:0;bottom:200px;
-padding:15px;
-overflow-y:auto;
+.child{
+  width:50px;
+  height:50px;
+  border-radius:50%;
+  background:#111;
+  color:white;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  margin-top:10px;
+  opacity:0;
+  transform:scale(0);
+  transition:.3s;
 }
 
-button{
-padding:10px;
-border:none;
-border-radius:10px;
-background:#ff0030;
-color:white;
-margin:5px;
+.floating-container.active .child{
+  opacity:1;
+  transform:scale(1);
 }
-
-.mic-panel{
-position:fixed;
-bottom:90px;
-left:50%;
-transform:translateX(-50%);
-}
-
-.mic{
-width:70px;height:70px;border-radius:50%;
-background:radial-gradient(circle,#ff0030,#800000);
-display:flex;align-items:center;justify-content:center;
-box-shadow:0 0 20px red;
-cursor:pointer;
-}
-
-.keyboard{
-position:fixed;bottom:0;width:100%;
-background:#111;padding:10px;
-display:none;gap:5px;
-}
-
-input{
-flex:1;padding:10px;border:none;border-radius:20px;
-background:#222;color:white;
-}
-
-.toggle-tab{
-position:fixed;top:20px;right:0;
-width:10px;height:40px;background:#ff0030;
-}
-
-.toggle-drawer{
-position:fixed;top:20px;right:-120px;
-width:120px;height:40px;background:#111;
-display:flex;justify-content:space-around;align-items:center;
-transition:.3s;
-}
-.toggle-drawer.open{right:0;}
-
-#fab{
-position:fixed;bottom:160px;right:20px;z-index:999;
-}
-
-#fab-main{
-width:60px;height:60px;background:#ff0030;border-radius:50%;
-display:flex;align-items:center;justify-content:center;
-box-shadow:0 0 15px red;
-cursor:pointer;
-}
-
-.fab-option{
-width:50px;height:50px;background:#111;border-radius:50%;
-display:flex;align-items:center;justify-content:center;
-position:absolute;right:5px;
-opacity:0;transform:scale(0);
-transition:.3s;
-}
-
-#fab.open .fab-option:nth-child(2){bottom:70px;opacity:1;transform:scale(1);}
-#fab.open .fab-option:nth-child(3){bottom:130px;opacity:1;transform:scale(1);}
-#fab.open .fab-option:nth-child(4){bottom:190px;opacity:1;transform:scale(1);}
 </style>
 </head>
 
 <body>
 
+<!-- LOGO -->
+<img src="{{ url_for('static', filename='ror-logo.png') }}" class="logo" id="logo">
+
+<!-- TOGGLE -->
+<div class="toggle-tab" id="toggleTab"></div>
+
+<div class="toggle-drawer" id="toggleDrawer">
+  <button onclick="setMicMode()">🎤</button>
+  <button onclick="setKeyboardMode()">⌨️</button>
+</div>
+
+<!-- CHAT -->
 <div class="chat" id="chat"></div>
 
+<!-- TRADING -->
 <div id="trading-box">
-
-<h2>📊 Trading Dashboard</h2>
-
-<button onclick="setSymbol('BTCUSDT')">BTC</button>
-<button onclick="setSymbol('ETHUSDT')">ETH</button>
-<button onclick="setSymbol('SOLUSDT')">SOL</button>
-
-<div id="chart" style="height:250px;"></div>
-
-<button onclick="getTrade()">Check Market</button>
-<button onclick="confirmTrade()">Execute Trade</button>
-<button onclick="connectUpstox()">Connect Upstox</button>
-<button onclick="loadPortfolio()">Portfolio</button>
-<button onclick="loadAnalytics()">Analytics</button>
-
-<div id="trade-result"></div>
-
+  <button id="trade-btn">📊 Check Market</button>
+  <div id="trade-result"></div>
 </div>
 
-<div class="mic-panel"><div class="mic" id="micBtn">🎤</div></div>
-
-<div class="keyboard">
-<input id="input">
-<button onclick="sendMessage()">Send</button>
+<!-- MIC PANEL -->
+<div class="mic-panel" id="micPanel">
+  <canvas id="blobCanvas"></canvas>
+  <div class="mic" id="micBtn">🎤</div>
 </div>
 
-<div id="fab">
-<div id="fab-main">⚙️</div>
-<div class="fab-option" onclick="switchMode('chat')">💬</div>
-<div class="fab-option" onclick="switchMode('trade')">📊</div>
-<div class="fab-option" onclick="switchMode('music')">🎵</div>
+<!-- KEYBOARD -->
+<div class="keyboard" id="keyboard">
+  <input type="text" id="input">
+  <button onclick="sendMessage()">Send</button>
+</div>
+
+<!-- FLOATING SWITCH -->
+<div class="floating-container" id="floatMenu">
+  <div class="main-bubble" onclick="toggleMenu()">⚙️</div>
+  <div class="child" onclick="showChat()">💬</div>
+  <div class="child" onclick="showTrading()">📈</div>
 </div>
 
 <script>
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const micBtn = document.getElementById("micBtn");
+const micPanel = document.getElementById("micPanel");
+const keyboard = document.getElementById("keyboard");
+const toggleTab = document.getElementById("toggleTab");
+const toggleDrawer = document.getElementById("toggleDrawer");
+const tradeBtn = document.getElementById("trade-btn");
+const tradeResult = document.getElementById("trade-result");
 
-// CHAT
-const chat=document.getElementById("chat");
+let listening=false;
 
-function addMessage(t,type){
-let d=document.createElement("div");
-d.className="bubble "+type;
-d.innerText=t;
-chat.appendChild(d);
+/* TOGGLE */
+toggleTab.onclick=()=>toggleDrawer.classList.toggle("open");
+
+function setMicMode(){
+  micPanel.style.display="flex";
+  keyboard.style.display="none";
+  toggleDrawer.classList.remove("open");
+}
+
+function setKeyboardMode(){
+  micPanel.style.display="none";
+  keyboard.style.display="flex";
+  toggleDrawer.classList.remove("open");
+}
+
+/* CHAT */
+function addMessage(text,type){
+  const div=document.createElement("div");
+  div.className="bubble "+type;
+  div.innerText=text;
+  chat.appendChild(div);
+  chat.scrollTop=chat.scrollHeight;
 }
 
 async function sendMessage(){
-let input=document.getElementById("input");
-addMessage(input.value,"user");
+  if(!input.value.trim()) return;
+  addMessage(input.value,"user");
 
-let res=await fetch("/chat",{method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({message:input.value})});
+  const res=await fetch("/chat",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({message:input.value})
+  });
 
-let data=await res.json();
-addMessage(data.reply,"bot");
-input.value="";
+  const data=await res.json();
+  addMessage(data.reply,"bot");
+  input.value="";
 }
 
-// FLOAT SWITCH
-function switchMode(mode){
-chat.style.display = (mode==="chat")?"flex":"none";
-document.getElementById("trading-box").style.display =
-(mode==="trade")?"block":"none";
+/* MIC */
+micBtn.onclick=()=>{
+  if(!('webkitSpeechRecognition' in window)) return;
+
+  const rec=new webkitSpeechRecognition();
+  rec.start();
+
+  rec.onresult=(e)=>{
+    const text=e.results[0][0].transcript;
+    addMessage(text,"user");
+    sendVoice(text);
+  }
 }
 
-// TRADING
-let currentSymbol="BTCUSDT";
-let latestSignal=null;
-
-function loadChart(s){
-document.getElementById("chart").innerHTML="";
-new TradingView.widget({
-container_id:"chart",
-symbol:"BINANCE:"+s,
-interval:"5",
-theme:"dark",
-autosize:true
-});
+function sendVoice(text){
+  fetch("/chat",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({message:text})
+  })
+  .then(res=>res.json())
+  .then(d=>addMessage(d.reply,"bot"));
 }
 
-function setSymbol(s){
-currentSymbol=s;
-loadChart(s);
+/* TRADING */
+tradeBtn.onclick=async()=>{
+  tradeResult.innerText="Loading...";
+  const res=await fetch("/ror-trade");
+  const data=await res.json();
+
+  tradeResult.innerText=
+  "Price: "+data.price+
+  "\nDecision: "+data.analysis.decision+
+  "\nConfidence: "+data.analysis.confidence+"%"+
+  "\nReason: "+data.analysis.reason;
 }
 
-async function getTrade(){
-let res=await fetch("/ror-trade?symbol="+currentSymbol);
-let data=await res.json();
-latestSignal=data.analysis;
-
-document.getElementById("trade-result").innerText =
-JSON.stringify(data,null,2);
+/* FLOAT MENU */
+function toggleMenu(){
+  document.getElementById("floatMenu").classList.toggle("active");
 }
 
-// AUTO POSITION SIZE
-function calculateQty(balance,risk,entry,sl){
-let riskAmount = balance * (risk/100);
-let perUnitRisk = Math.abs(entry-sl);
-return Math.max(1, Math.floor(riskAmount/perUnitRisk));
+function showChat(){
+  document.getElementById("trading-box").style.display="none";
+  chat.style.display="flex";
 }
 
-// EXECUTE
-async function confirmTrade(){
-
-if(!latestSignal){alert("No signal");return;}
-
-let balance = 10000; // replace later from API
-let qty = calculateQty(balance,1,latestSignal.entry,latestSignal.sl);
-
-if(!confirm("Trade "+latestSignal.decision+" Qty:"+qty)) return;
-
-let res=await fetch("/execute-order",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-qty:qty,
-price:latestSignal.entry,
-type:latestSignal.decision,
-instrument:"NSE_EQ|INE002A01018"
-})
-});
-
-alert("Order Sent");
+function showTrading(){
+  document.getElementById("trading-box").style.display="block";
+  chat.style.display="none";
 }
-
-// PORTFOLIO
-async function loadPortfolio(){
-let res=await fetch("/portfolio");
-let data=await res.json();
-document.getElementById("trade-result").innerText =
-JSON.stringify(data,null,2);
-}
-
-// ANALYTICS
-async function loadAnalytics(){
-let res=await fetch("/analytics");
-let data=await res.json();
-document.getElementById("trade-result").innerText =
-JSON.stringify(data,null,2);
-}
-
-// INIT
-loadChart(currentSymbol);
-
 </script>
 
 </body>
