@@ -79,3 +79,16 @@ window.getTrade = async function () {
 
   document.getElementById("trade-result").innerHTML = html;
 };
+function sendToBackend(text) {
+  fetch("/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ message: text })
+  })
+  .then(res => res.json())
+  .then(data => {
+    addMessage(data.reply, "ror");
+  });
+}
