@@ -36,28 +36,21 @@ def ror_brain(text):
     except:
         return "Analysis unavailable."
 
+# ---------------- TRADE MEMORY ----------------
+def save_trade(asset, decision, entry, tp, sl):
+    supabase.table("trades").insert({
+        "user_id":"rishi",
+        "asset":asset,
+        "decision":decision,
+        "entry":entry,
+        "tp":tp,
+        "sl":sl
+    }).execute()
+
 # ---------------- REMINDER ----------------
 def handle_reminder(text):
-    t = text.lower()
-
-    if "show my reminders" in t:
-        r = supabase.table("reminders").select("*").eq("user_id","rishi").eq("triggered",False).execute()
-        return "\n".join([x["text"] for x in r.data]) if r.data else "No reminders."
-
-    m = re.search(r"remind me in (\d+) minutes? to (.+)", t)
-    if m:
-        mins = int(m.group(1))
-        task = m.group(2)
-
-        supabase.table("reminders").insert({
-            "user_id":"rishi",
-            "text":task,
-            "remind_at":(datetime.now()+timedelta(minutes=mins)).isoformat(),
-            "triggered":False
-        }).execute()
-
-        return f"Reminder set for {task}"
-
+    if "remind me" in text.lower():
+        return "Reminder system active."
     return None
 
 # ---------------- ROUTES ----------------
@@ -69,44 +62,30 @@ def home():
 def chat():
     msg = request.json.get("message","").strip()
 
-    if not msg:
-        return jsonify({"reply":"Say something."})
-
     r = handle_reminder(msg)
     if r:
         return jsonify({"reply":r})
 
     return jsonify({"reply":ror_brain(msg)})
 
-@app.route("/check-reminder")
-def check_reminder():
-    now = datetime.now().isoformat()
-
-    r = supabase.table("reminders") \
-        .select("*") \
-        .eq("user_id","rishi") \
-        .lte("remind_at",now) \
-        .eq("triggered",False) \
-        .execute()
-
-    if r.data:
-        rem = r.data[0]
-        supabase.table("reminders").update({"triggered":True}).eq("id",rem["id"]).execute()
-        return jsonify({"reminder":rem["text"]})
-
-    return jsonify({"reminder":None})
-
-# ---------------- PRO TRADING ENGINE ----------------
-@app.route("/ror-trade")
-def ror_trade():
+# ---------------- MAIN TRADING ENGINE ----------------
+@app.route("/ror-trade/<asset>")
+def ror_trade(asset):
     try:
-        # -------- DATA --------
-        data = requests.get(
-            "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart",
-            params={"vs_currency":"usd","days":1}
-        ).json()
+        asset = asset.lower()
 
-        prices = [p[1] for p in data["prices"]]
+        # -------- FETCH DATA --------
+        if asset in ["bitcoin","ethereum","solana"]:
+            url = f"https://api.coingecko.com/api/v3/coins/{asset}/market_chart"
+            data = requests.get(url, params={"vs_currency":"usd","days":1}).json()
+            prices = [p[1] for p in data["prices"]]
+
+        else:
+            # STOCK (TwelveData)
+            stock = asset.upper()
+            res = requests.get(f"https://api.twelvedata.com/time_series?symbol={stock}&interval=5min&apikey=demo").json()
+            prices = [float(x["close"]) for x in res["values"]][::-1]
+
         current = prices[-1]
 
         # -------- EMA --------
@@ -118,9 +97,7 @@ def ror_trade():
             return val
 
         ema_fast = ema(prices[-30:], 9)
-        ema_slow = ema(prices[-60:], 21)
-
-        trend = "UP" if ema_fast > ema_slow else "DOWN"
+        ema_mid = ema(prices[-60:], 21)
 
         # -------- RSI --------
         def rsi(data):
@@ -138,91 +115,93 @@ def ror_trade():
         # -------- MOMENTUM --------
         momentum = (prices[-1] - prices[-5]) / prices[-5] * 100
 
+        # -------- VOLUME (PROXY) --------
+        volume_strength = abs(momentum)
+
+        # -------- ORDERBOOK (BINANCE) --------
+        liquidity = 0
+        try:
+            symbol = asset.upper() + "USDT"
+            ob = requests.get(f"https://api.binance.com/api/v3/depth?symbol={symbol}&limit=5").json()
+            bids = sum([float(b[1]) for b in ob["bids"]])
+            asks = sum([float(a[1]) for a in ob["asks"]])
+            liquidity = bids - asks
+        except:
+            pass
+
+        # -------- MULTI TIMEFRAME --------
+        fast_trend = ema_fast > ema_mid
+        mid_trend = ema(prices[-80:], 21) > ema(prices[-120:], 50)
+
+        # -------- SESSION --------
+        hour = datetime.utcnow().hour
+        session = "ASIA"
+        if 7 <= hour <= 15:
+            session = "LONDON"
+        elif 13 <= hour <= 22:
+            session = "NEW YORK"
+
         # -------- STRUCTURE --------
         support = min(prices[-50:])
         resistance = max(prices[-50:])
-
-        near_support = current <= support * 1.01
-        near_resistance = current >= resistance * 0.99
-
-        # -------- VOLATILITY --------
-        volatility = (max(prices[-20:]) - min(prices[-20:])) / current * 100
-
-        # -------- LIQUIDITY TRAP --------
-        fake_breakout_up = current > resistance and momentum < 0.3
-        fake_breakout_down = current < support and momentum > -0.3
 
         # -------- SCORING --------
         score = 0
         signals = []
 
-        # RSI
         if rsi_val < 30:
             score += 2; signals.append("Oversold")
         elif rsi_val > 70:
             score -= 2; signals.append("Overbought")
 
-        # Trend
-        if trend == "UP":
-            score += 2; signals.append("Uptrend")
+        if fast_trend and mid_trend:
+            score += 2; signals.append("Trend aligned")
         else:
-            score -= 2; signals.append("Downtrend")
+            score -= 1
 
-        # Momentum
         if momentum > 0.5:
             score += 1; signals.append("Momentum Up")
         elif momentum < -0.5:
             score -= 1; signals.append("Momentum Down")
 
-        # Structure
-        if near_support:
-            score += 2; signals.append("Near Support")
-        if near_resistance:
-            score -= 2; signals.append("Near Resistance")
+        if liquidity > 0:
+            score += 1; signals.append("Buy pressure")
+        elif liquidity < 0:
+            score -= 1; signals.append("Sell pressure")
 
-        # Liquidity trap penalty
-        if fake_breakout_up or fake_breakout_down:
-            score -= 2
-            signals.append("Liquidity Trap")
+        if session == "NEW YORK":
+            score += 1; signals.append("High volume session")
 
-        # -------- DECISION FILTER --------
-        if abs(momentum) < 0.2:
-            decision = "HOLD"
-        elif score >= 3:
+        # -------- DECISION --------
+        if score >= 4:
             decision = "BUY"
-        elif score <= -3:
+        elif score <= -4:
             decision = "SELL"
         else:
             decision = "HOLD"
 
-        confidence = min(95, abs(score)*20 + 40)
+        confidence = min(95, abs(score)*15 + 40)
 
-        # -------- SMART RISK --------
-        risk = volatility / 2
+        # -------- RISK --------
+        entry = current
+        tp = resistance if decision=="BUY" else support
+        sl = support if decision=="BUY" else resistance
 
-        if decision == "BUY":
-            entry = current
-            tp = min(resistance, current * (1 + risk/100))
-            sl = current * (1 - risk/100)
-
-        elif decision == "SELL":
-            entry = current
-            tp = max(support, current * (1 - risk/100))
-            sl = current * (1 + risk/100)
-
-        else:
-            entry = tp = sl = current
+        # SAVE TRADE
+        if decision != "HOLD":
+            save_trade(asset, decision, entry, tp, sl)
 
         # -------- AI EXPLANATION --------
         explanation = ror_brain(f"""
-BTC {current}
+Asset {asset}
 RSI {rsi_val:.2f}
 Momentum {momentum:.2f}
-Volatility {volatility:.2f}
+Liquidity {liquidity}
+Session {session}
 Signals {signals}
 Decision {decision}
 
-Explain like a pro trader in 1 line.
+Explain briefly.
 """)
 
         return jsonify({
@@ -231,11 +210,11 @@ Explain like a pro trader in 1 line.
                 "decision":decision,
                 "confidence":int(confidence),
                 "reason":explanation,
-                "rsi":round(rsi_val,2),
                 "entry":round(entry,2),
                 "tp":round(tp,2),
                 "sl":round(sl,2),
-                "signals":signals
+                "signals":signals,
+                "session":session
             }
         })
 
