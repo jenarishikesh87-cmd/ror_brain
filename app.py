@@ -224,13 +224,25 @@ def check_reminder():
 
     return jsonify({"reminder": None})
 
-#-------------
+#-------------TRADE--------------
+import requests
+
 @app.route("/ror-trade", methods=["GET"])
 def ror_trade():
-    return {
-        "status": "Trading module ready",
-        "message": "ROR trading not connected yet"
-    }
+    try:
+        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+        res = requests.get(url).json()
+
+        price = float(res["price"])
+
+        return {
+            "status": "live",
+            "symbol": "BTC/USDT",
+            "price": price
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
 # ---------------- START ----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
