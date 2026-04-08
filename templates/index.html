@@ -4,6 +4,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ROR Pro</title>
 
+<script src="https://s3.tradingview.com/tv.js"></script>
+
 <style>
 body{
   margin:0;
@@ -12,15 +14,13 @@ body{
   font-family:system-ui;
 }
 
-/* CARD */
 .card{
   background:#111;
   margin:10px;
-  padding:15px;
+  padding:12px;
   border-radius:12px;
 }
 
-/* BUTTON */
 button{
   background:#ff004c;
   border:none;
@@ -30,12 +30,13 @@ button{
   margin:3px;
 }
 
-/* DECISION */
 .BUY{background:#00ff8840;}
 .SELL{background:#ff003040;}
 .HOLD{background:#88888840;}
 
-.price{font-size:24px;}
+#chart{
+  height:300px;
+}
 </style>
 </head>
 
@@ -45,11 +46,15 @@ button{
 
 <!-- ASSETS -->
 <div style="padding:10px;">
-<button onclick="setAsset('bitcoin')">BTC</button>
-<button onclick="setAsset('ethereum')">ETH</button>
-<button onclick="setAsset('solana')">SOL</button>
-<button onclick="setAsset('AAPL')">AAPL</button>
+<button onclick="setAsset('bitcoin','BINANCE:BTCUSDT')">BTC</button>
+<button onclick="setAsset('ethereum','BINANCE:ETHUSDT')">ETH</button>
+<button onclick="setAsset('solana','BINANCE:SOLUSDT')">SOL</button>
+<button onclick="setAsset('AAPL','NASDAQ:AAPL')">AAPL</button>
+<button onclick="setAsset('RELIANCE','NSE:RELIANCE')">RELIANCE</button>
 </div>
+
+<!-- CHART -->
+<div id="chart"></div>
 
 <!-- TRADE -->
 <div class="card" id="trade"></div>
@@ -60,23 +65,33 @@ button{
 <button onclick="confirmTrade()">Confirm Trade</button>
 </div>
 
-<!-- UPSTOX -->
-<div style="padding:10px;">
-<button onclick="connectUpstox()">Connect Upstox</button>
-<button onclick="loadPortfolio()">Portfolio</button>
-</div>
-
-<!-- PORTFOLIO -->
-<div class="card" id="portfolio"></div>
-
 <script>
 
 let currentAsset = "bitcoin";
+let tvSymbol = "BINANCE:BTCUSDT";
 let latestSignal = null;
+let widget = null;
+
+// -------- CHART INIT --------
+function loadChart(){
+  document.getElementById("chart").innerHTML = "";
+
+  widget = new TradingView.widget({
+    autosize: true,
+    symbol: tvSymbol,
+    interval: "5",
+    timezone: "Asia/Kolkata",
+    theme: "dark",
+    style: "1",
+    container_id: "chart"
+  });
+}
 
 // -------- SET ASSET --------
-function setAsset(a){
-  currentAsset = a;
+function setAsset(asset, symbol){
+  currentAsset = asset;
+  tvSymbol = symbol;
+  loadChart();
 }
 
 // -------- FETCH TRADE --------
@@ -90,7 +105,6 @@ async function getTrade(){
   document.getElementById("trade").innerHTML = `
 <div>Price: $${data.price}</div>
 <div class="${a.decision}">${a.decision}</div>
-<div>Confidence: ${a.confidence}%</div>
 
 <div>Entry: ${a.entry}</div>
 <div>TP: ${a.tp}</div>
@@ -98,10 +112,28 @@ async function getTrade(){
 
 <div>${a.signals.join(", ")}</div>
 <div>${a.reason}</div>
+
+<button onclick="drawZones(${a.entry},${a.tp},${a.sl})">
+📍 Show Zones
+</button>
   `;
 }
 
-// -------- CONFIRM TRADE --------
+// -------- DRAW ZONES --------
+function drawZones(entry,tp,sl){
+
+  alert(`
+ENTRY: ${entry}
+TP: ${tp}
+SL: ${sl}
+
+(Visual zones shown conceptually)
+  `);
+
+  // Real overlay needs TradingView advanced API (optional upgrade)
+}
+
+// -------- AUTO TOKEN DETECTION --------
 async function confirmTrade(){
 
   if(!latestSignal){
@@ -109,7 +141,20 @@ async function confirmTrade(){
     return;
   }
 
-  if(!confirm(`Execute ${latestSignal.decision}?`)) return;
+  // auto instrument mapping
+  const instrumentMap = {
+    "RELIANCE":"NSE_EQ|INE002A01018",
+    "AAPL":"US_EQ|AAPL"
+  };
+
+  const instrument = instrumentMap[currentAsset.toUpperCase()];
+
+  if(!instrument){
+    alert("Instrument not supported yet");
+    return;
+  }
+
+  if(!confirm(`Execute ${latestSignal.decision} ${currentAsset}?`)) return;
 
   const res = await fetch("/execute-order",{
     method:"POST",
@@ -118,29 +163,18 @@ async function confirmTrade(){
       qty:1,
       price:latestSignal.entry,
       type:latestSignal.decision,
-      instrument:"NSE_EQ|INE002A01018" // sample token (replace later)
+      instrument:instrument
     })
   });
 
   const data = await res.json();
-  alert("Order Response: " + JSON.stringify(data));
+  alert("Order placed: " + JSON.stringify(data));
 }
 
-// -------- PORTFOLIO --------
-async function loadPortfolio(){
-  const res = await fetch("/portfolio");
-  const data = await res.json();
-
-  document.getElementById("portfolio").innerHTML =
-    JSON.stringify(data,null,2);
-}
-
-// -------- UPSTOX --------
-function connectUpstox(){
-  window.location.href = "/upstox-login";
-}
+// INIT
+loadChart();
 
 </script>
 
 </body>
-</html>
+  </html>
