@@ -49,3 +49,8 @@ button {
     color: white;
     border: none;
 }
+
+#trading-box {
+  border-top: 1px solid red;
+  margin-top: 20px;
+}
