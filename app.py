@@ -1,7 +1,6 @@
 import os
 import requests
 import re
-import json
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template
 from supabase import create_client
@@ -15,141 +14,46 @@ SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ---------------- MEMORY ----------------
-def load_memory():
-    response = supabase.table("memory") \
-        .select("content") \
-        .eq("user_id", "rishi") \
-        .order("id") \
-        .execute()
-
-    if response.data:
-        return "\n".join([row["content"] for row in response.data])
-    return ""
-
-def save_memory(text, category):
-    supabase.table("memory").insert({
-        "user_id": "rishi",
-        "category": category,
-        "content": text
-    }).execute()
-
-# ---------------- ROR BRAIN ----------------
-def ror_brain(user_text):
-
-    memory_context = load_memory()
-
-    system_prompt = f"""
-You are ROR (Reality of Rishi).
-You are his grounded alter ego.
-Be natural. No robotic tone.
-
-Memory:
-{memory_context}
-
-Format strictly:
-CATEGORY: <category>
-REPLY: <actual reply>
-"""
-
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        "model": "openai/gpt-4o-mini",
-        "temperature": 0.7,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_text}
-        ]
-    }
-
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=data
-    )
-
-    result = response.json()
-
-    if "choices" not in result:
-        return "Network issue. Try again."
-
-    output = result["choices"][0]["message"]["content"]
-
+# ---------------- ROR ----------------
+def ror_brain(text):
     try:
-        category = output.split("CATEGORY:")[1].split("\n")[0].strip()
-        reply = output.split("REPLY:")[1].strip()
+        res = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": "You are a professional trading assistant."},
+                    {"role": "user", "content": text}
+                ]
+            }
+        ).json()
+
+        return res["choices"][0]["message"]["content"]
     except:
-        category = "personal"
-        reply = output
+        return "Analysis unavailable."
 
-    combined = f"User: {user_text}\nROR: {reply}"
-    save_memory(combined, category)
+# ---------------- REMINDER ----------------
+def handle_reminder(text):
+    t = text.lower()
 
-    return reply
+    if "show my reminders" in t:
+        r = supabase.table("reminders").select("*").eq("user_id","rishi").eq("triggered",False).execute()
+        return "\n".join([x["text"] for x in r.data]) if r.data else "No reminders."
 
-# ---------------- REMINDER HANDLER ----------------
-def handle_reminder(user_text):
-
-    text = user_text.lower()
-
-    # SHOW
-    if "show my reminders" in text:
-        response = supabase.table("reminders") \
-            .select("*") \
-            .eq("user_id", "rishi") \
-            .eq("triggered", False) \
-            .execute()
-
-        if not response.data:
-            return "You have no active reminders."
-
-        msg = "Your reminders:\n"
-        for r in response.data:
-            msg += f"ID {r['id']} → {r['text']} at {r['remind_at']}\n"
-        return msg
-
-    # DELETE
-    match = re.search(r"delete reminder (\d+)", text)
-    if match:
-        rid = int(match.group(1))
-        supabase.table("reminders") \
-            .delete() \
-            .eq("id", rid) \
-            .eq("user_id", "rishi") \
-            .execute()
-        return f"Reminder {rid} deleted."
-
-    # RENAME
-    match = re.search(r"rename reminder (\d+) to (.+)", text)
-    if match:
-        rid = int(match.group(1))
-        new_name = match.group(2)
-
-        supabase.table("reminders") \
-            .update({"text": new_name}) \
-            .eq("id", rid) \
-            .eq("user_id", "rishi") \
-            .execute()
-
-        return f"Reminder {rid} renamed."
-
-    # CREATE
-    match = re.search(r"remind me in (\d+) minutes? to (.+)", text)
-    if match:
-        minutes = int(match.group(1))
-        task = match.group(2)
-
-        remind_time = datetime.now() + timedelta(minutes=minutes)
+    m = re.search(r"remind me in (\d+) minutes? to (.+)", t)
+    if m:
+        mins = int(m.group(1))
+        task = m.group(2)
 
         supabase.table("reminders").insert({
-            "user_id": "rishi",
-            "text": task,
-            "remind_at": remind_time.isoformat(),
-            "triggered": False
+            "user_id":"rishi",
+            "text":task,
+            "remind_at":(datetime.now()+timedelta(minutes=mins)).isoformat(),
+            "triggered":False
         }).execute()
 
         return f"Reminder set for {task}"
@@ -163,96 +67,182 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.json
-    user_text = data.get("message", "").strip()
+    msg = request.json.get("message","").strip()
 
-    if not user_text:
-        return jsonify({"reply": "Say something."})
+    if not msg:
+        return jsonify({"reply":"Say something."})
 
-    reminder_reply = handle_reminder(user_text)
-    if reminder_reply:
-        return jsonify({"reply": reminder_reply})
+    r = handle_reminder(msg)
+    if r:
+        return jsonify({"reply":r})
 
-    reply = ror_brain(user_text)
-    return jsonify({"reply": reply})
+    return jsonify({"reply":ror_brain(msg)})
 
 @app.route("/check-reminder")
 def check_reminder():
     now = datetime.now().isoformat()
 
-    response = supabase.table("reminders") \
+    r = supabase.table("reminders") \
         .select("*") \
-        .eq("user_id", "rishi") \
-        .lte("remind_at", now) \
-        .eq("triggered", False) \
+        .eq("user_id","rishi") \
+        .lte("remind_at",now) \
+        .eq("triggered",False) \
         .execute()
 
-    if response.data:
-        reminder = response.data[0]
+    if r.data:
+        rem = r.data[0]
+        supabase.table("reminders").update({"triggered":True}).eq("id",rem["id"]).execute()
+        return jsonify({"reminder":rem["text"]})
 
-        supabase.table("reminders") \
-            .update({"triggered": True}) \
-            .eq("id", reminder["id"]) \
-            .execute()
+    return jsonify({"reminder":None})
 
-        return jsonify({"reminder": reminder["text"]})
-
-    return jsonify({"reminder": None})
-
-# ---------------- TRADE ----------------
-@app.route("/ror-trade", methods=["GET"])
+# ---------------- PRO TRADING ENGINE ----------------
+@app.route("/ror-trade")
 def ror_trade():
     try:
-        price = None
+        # -------- DATA --------
+        data = requests.get(
+            "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart",
+            params={"vs_currency":"usd","days":1}
+        ).json()
 
-        # CoinGecko
-        try:
-            res = requests.get(
-                "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-            ).json()
-            price = res["bitcoin"]["usd"]
-        except:
-            pass
+        prices = [p[1] for p in data["prices"]]
+        current = prices[-1]
 
-        # Fallback
-        if price is None:
-            res = requests.get("https://api.coincap.io/v2/assets/bitcoin").json()
-            price = float(res["data"]["priceUsd"])
+        # -------- EMA --------
+        def ema(data, period):
+            k = 2/(period+1)
+            val = data[0]
+            for p in data[1:]:
+                val = p*k + val*(1-k)
+            return val
 
-        # ROR decision
-        prompt = f"""
-You are an intelligent trading assistant.
+        ema_fast = ema(prices[-30:], 9)
+        ema_slow = ema(prices[-60:], 21)
 
-BTC price: {price}
+        trend = "UP" if ema_fast > ema_slow else "DOWN"
 
-Respond ONLY in JSON:
-{{
-"decision":"BUY/SELL/HOLD",
-"confidence":number,
-"reason":"short reason"
-}}
-"""
+        # -------- RSI --------
+        def rsi(data):
+            gains, losses = [], []
+            for i in range(1,15):
+                d = data[-i] - data[-i-1]
+                if d>0: gains.append(d)
+                else: losses.append(abs(d))
+            g = sum(gains)/14 if gains else 0.001
+            l = sum(losses)/14 if losses else 0.001
+            return 100-(100/(1+(g/l)))
 
-        decision = ror_brain(prompt)
+        rsi_val = rsi(prices)
 
-        try:
-            parsed = json.loads(decision)
-        except:
-            parsed = {
-                "decision": "HOLD",
-                "confidence": 50,
-                "reason": "Parsing failed"
-            }
+        # -------- MOMENTUM --------
+        momentum = (prices[-1] - prices[-5]) / prices[-5] * 100
+
+        # -------- STRUCTURE --------
+        support = min(prices[-50:])
+        resistance = max(prices[-50:])
+
+        near_support = current <= support * 1.01
+        near_resistance = current >= resistance * 0.99
+
+        # -------- VOLATILITY --------
+        volatility = (max(prices[-20:]) - min(prices[-20:])) / current * 100
+
+        # -------- LIQUIDITY TRAP --------
+        fake_breakout_up = current > resistance and momentum < 0.3
+        fake_breakout_down = current < support and momentum > -0.3
+
+        # -------- SCORING --------
+        score = 0
+        signals = []
+
+        # RSI
+        if rsi_val < 30:
+            score += 2; signals.append("Oversold")
+        elif rsi_val > 70:
+            score -= 2; signals.append("Overbought")
+
+        # Trend
+        if trend == "UP":
+            score += 2; signals.append("Uptrend")
+        else:
+            score -= 2; signals.append("Downtrend")
+
+        # Momentum
+        if momentum > 0.5:
+            score += 1; signals.append("Momentum Up")
+        elif momentum < -0.5:
+            score -= 1; signals.append("Momentum Down")
+
+        # Structure
+        if near_support:
+            score += 2; signals.append("Near Support")
+        if near_resistance:
+            score -= 2; signals.append("Near Resistance")
+
+        # Liquidity trap penalty
+        if fake_breakout_up or fake_breakout_down:
+            score -= 2
+            signals.append("Liquidity Trap")
+
+        # -------- DECISION FILTER --------
+        if abs(momentum) < 0.2:
+            decision = "HOLD"
+        elif score >= 3:
+            decision = "BUY"
+        elif score <= -3:
+            decision = "SELL"
+        else:
+            decision = "HOLD"
+
+        confidence = min(95, abs(score)*20 + 40)
+
+        # -------- SMART RISK --------
+        risk = volatility / 2
+
+        if decision == "BUY":
+            entry = current
+            tp = min(resistance, current * (1 + risk/100))
+            sl = current * (1 - risk/100)
+
+        elif decision == "SELL":
+            entry = current
+            tp = max(support, current * (1 - risk/100))
+            sl = current * (1 + risk/100)
+
+        else:
+            entry = tp = sl = current
+
+        # -------- AI EXPLANATION --------
+        explanation = ror_brain(f"""
+BTC {current}
+RSI {rsi_val:.2f}
+Momentum {momentum:.2f}
+Volatility {volatility:.2f}
+Signals {signals}
+Decision {decision}
+
+Explain like a pro trader in 1 line.
+""")
 
         return jsonify({
-            "price": price,
-            "analysis": parsed
+            "price": round(entry,2),
+            "analysis":{
+                "decision":decision,
+                "confidence":int(confidence),
+                "reason":explanation,
+                "rsi":round(rsi_val,2),
+                "entry":round(entry,2),
+                "tp":round(tp,2),
+                "sl":round(sl,2),
+                "signals":signals
+            }
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error":str(e)})
 
 # ---------------- START ----------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT",10000))
     app.run(host="0.0.0.0", port=port)
