@@ -34,14 +34,17 @@ async function getTrade() {
   let html = "";
 
   if (data.error) {
-  html = "❌ Error: " + data.error;
-} else if (!data.price) {
-  html = "⚠️ No market data received";
-} else {
-  html = `
-    <p><b>Price:</b> $${data.price}</p>
-    <p><b>Decision:</b> ${data.analysis?.decision || "N/A"}</p>
-    <p><b>Confidence:</b> ${data.analysis?.confidence || "0"}%</p>
-    <p><b>Reason:</b> ${data.analysis?.reason || "No reason"}</p>
-  `;
+    html = "❌ Error: " + data.error;
+  } else if (!data.price) {
+    html = "⚠️ No market data received";
+  } else {
+    html = `
+      <p><b>Price:</b> $${data.price}</p>
+      <p><b>Decision:</b> ${data.analysis?.decision || "N/A"}</p>
+      <p><b>Confidence:</b> ${data.analysis?.confidence || "0"}%</p>
+      <p><b>Reason:</b> ${data.analysis?.reason || "No reason"}</p>
+    `;
   }
+
+  document.getElementById("trade-result").innerHTML = html;
+}
