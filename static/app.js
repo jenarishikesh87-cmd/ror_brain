@@ -48,3 +48,9 @@ async function getTrade() {
 
   document.getElementById("trade-result").innerHTML = html;
 }
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("trade-btn");
+  if (btn) {
+    btn.addEventListener("click", getTrade);
+  }
+});
