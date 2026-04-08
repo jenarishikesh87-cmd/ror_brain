@@ -1,40 +1,12 @@
-// ---------------- ELEMENTS ----------------
-const chat = document.getElementById("chat");
-const input = document.getElementById("input");
-const tradeBtn = document.getElementById("trade-btn");
-const tradeResult = document.getElementById("trade-result");
-const micBtn = document.getElementById("micBtn");
+// CENTRAL INIT
+document.addEventListener("DOMContentLoaded", () => {
+    console.log("ROR SYSTEM READY");
 
-// ---------------- ADD MESSAGE ----------------
-function addMessage(text, type){
-    const bubble = document.createElement("div");
-    bubble.className = "bubble " + type;
-    bubble.innerText = text;
-
-    chat.appendChild(bubble);
-
-    const meta = document.createElement("div");
-    meta.className = "meta " + (type==="user" ? "user-meta":"bot-meta");
-    meta.innerText = "Sent · " + new Date().toLocaleTimeString();
-
-    chat.appendChild(meta);
-
-    chat.scrollTop = chat.scrollHeight;
-}
-
-// ---------------- SEND MESSAGE ----------------
-async function sendMessage(){
-    const message = input.value.trim();
-    if(!message) return;
-
-    addMessage(message, "user");
-    input.value = "";
-
-    try{
-        const res = await fetch("/chat", {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({message})
+    initChat();
+    initTrade();
+    initMic();
+    initReminder();
+});            body: JSON.stringify({message})
         });
 
         const data = await res.json();
