@@ -7,46 +7,22 @@
 <link rel="stylesheet" href="/static/style.css">
 
 <style>
-/* FLOATING BUBBLE */
-.floating-container{
-  position: fixed;
-  bottom: 100px;
-  right: 20px;
-  z-index: 999;
-}
-
-.main-bubble{
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: #ff0033;
+/* FLOAT BUTTON */
+.float-btn{
+  position:fixed;
+  bottom:90px;
+  right:20px;
+  width:60px;
+  height:60px;
+  border-radius:50%;
+  background:#ff0033;
   display:flex;
-  justify-content:center;
   align-items:center;
+  justify-content:center;
   font-size:22px;
   color:white;
-  cursor:pointer;
   box-shadow:0 0 20px red;
-}
-
-.child{
-  width:50px;
-  height:50px;
-  border-radius:50%;
-  background:#111;
-  color:white;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  margin-top:10px;
-  opacity:0;
-  transform:scale(0);
-  transition:.3s;
-}
-
-.floating-container.active .child{
-  opacity:1;
-  transform:scale(1);
+  z-index:999;
 }
 </style>
 </head>
@@ -67,12 +43,6 @@
 <!-- CHAT -->
 <div class="chat" id="chat"></div>
 
-<!-- TRADING -->
-<div id="trading-box">
-  <button id="trade-btn">📊 Check Market</button>
-  <div id="trade-result"></div>
-</div>
-
 <!-- MIC PANEL -->
 <div class="mic-panel" id="micPanel">
   <canvas id="blobCanvas"></canvas>
@@ -85,25 +55,20 @@
   <button onclick="sendMessage()">Send</button>
 </div>
 
-<!-- FLOATING SWITCH -->
-<div class="floating-container" id="floatMenu">
-  <div class="main-bubble" onclick="toggleMenu()">⚙️</div>
-  <div class="child" onclick="showChat()">💬</div>
-  <div class="child" onclick="showTrading()">📈</div>
-</div>
+<!-- FLOAT SWITCH -->
+<div class="float-btn" onclick="toggleUI()">⚙️</div>
 
 <script>
-const chat = document.getElementById("chat");
-const input = document.getElementById("input");
-const micBtn = document.getElementById("micBtn");
-const micPanel = document.getElementById("micPanel");
-const keyboard = document.getElementById("keyboard");
-const toggleTab = document.getElementById("toggleTab");
-const toggleDrawer = document.getElementById("toggleDrawer");
-const tradeBtn = document.getElementById("trade-btn");
-const tradeResult = document.getElementById("trade-result");
+const chat=document.getElementById("chat");
+const input=document.getElementById("input");
+const micBtn=document.getElementById("micBtn");
+const micPanel=document.getElementById("micPanel");
+const keyboard=document.getElementById("keyboard");
+const toggleTab=document.getElementById("toggleTab");
+const toggleDrawer=document.getElementById("toggleDrawer");
 
 let listening=false;
+let t=0;
 
 /* TOGGLE */
 toggleTab.onclick=()=>toggleDrawer.classList.toggle("open");
@@ -120,6 +85,9 @@ function setKeyboardMode(){
   toggleDrawer.classList.remove("open");
 }
 
+/* DEFAULT */
+setMicMode();
+
 /* CHAT */
 function addMessage(text,type){
   const div=document.createElement("div");
@@ -131,6 +99,7 @@ function addMessage(text,type){
 
 async function sendMessage(){
   if(!input.value.trim()) return;
+
   addMessage(input.value,"user");
 
   const res=await fetch("/chat",{
@@ -150,12 +119,15 @@ micBtn.onclick=()=>{
 
   const rec=new webkitSpeechRecognition();
   rec.start();
+  listening=true;
 
   rec.onresult=(e)=>{
     const text=e.results[0][0].transcript;
     addMessage(text,"user");
     sendVoice(text);
   }
+
+  rec.onend=()=>listening=false;
 }
 
 function sendVoice(text){
@@ -168,32 +140,45 @@ function sendVoice(text){
   .then(d=>addMessage(d.reply,"bot"));
 }
 
-/* TRADING */
-tradeBtn.onclick=async()=>{
-  tradeResult.innerText="Loading...";
-  const res=await fetch("/ror-trade");
-  const data=await res.json();
+/* BLOB ANIMATION */
+const canvas=document.getElementById("blobCanvas");
+const ctx=canvas.getContext("2d");
 
-  tradeResult.innerText=
-  "Price: "+data.price+
-  "\nDecision: "+data.analysis.decision+
-  "\nConfidence: "+data.analysis.confidence+"%"+
-  "\nReason: "+data.analysis.reason;
+canvas.width=160;
+canvas.height=160;
+
+function drawBlob(){
+  ctx.clearRect(0,0,160,160);
+  ctx.fillStyle="rgba(255,0,0,0.4)";
+  ctx.beginPath();
+
+  for(let i=0;i<360;i++){
+    let angle=i*Math.PI/180;
+    let r=60+8*Math.sin(angle*2+t)+5*Math.sin(angle*3+t);
+
+    let x=80+r*Math.cos(angle);
+    let y=80+r*Math.sin(angle);
+
+    if(i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
+
+  ctx.closePath();
+  ctx.fill();
+
+  t+=0.05;
+  requestAnimationFrame(drawBlob);
 }
 
-/* FLOAT MENU */
-function toggleMenu(){
-  document.getElementById("floatMenu").classList.toggle("active");
-}
+drawBlob();
 
-function showChat(){
-  document.getElementById("trading-box").style.display="none";
-  chat.style.display="flex";
-}
-
-function showTrading(){
-  document.getElementById("trading-box").style.display="block";
-  chat.style.display="none";
+/* FLOAT UI SWITCH */
+function toggleUI(){
+  if(micPanel.style.display==="none"){
+    setMicMode();
+  }else{
+    setKeyboardMode();
+  }
 }
 </script>
 
