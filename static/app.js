@@ -1,32 +1,12 @@
-// ---------------- SEND MESSAGE ----------------
-async function sendMessage(){
-    const input = document.getElementById("input"); // FIXED ID
-    const message = input.value.trim();
-
-    if(!message) return;
-
-    addMessage(message, "user");
-    input.value = "";
-
-    try{
-        const res = await fetch("/chat", {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({message})
-        });
-
-        const data = await res.json();
-        addMessage(data.reply, "bot"); // FIXED TYPE
-
-    }catch(err){
-        addMessage("Error connecting to server", "bot");
-    }
-}
+// ---------------- ELEMENTS ----------------
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const tradeBtn = document.getElementById("trade-btn");
+const tradeResult = document.getElementById("trade-result");
+const micBtn = document.getElementById("micBtn");
 
 // ---------------- ADD MESSAGE ----------------
 function addMessage(text, type){
-    const chat = document.getElementById("chat");
-
     const bubble = document.createElement("div");
     bubble.className = "bubble " + type;
     bubble.innerText = text;
@@ -42,50 +22,105 @@ function addMessage(text, type){
     chat.scrollTop = chat.scrollHeight;
 }
 
+// ---------------- SEND MESSAGE ----------------
+async function sendMessage(){
+    const message = input.value.trim();
+    if(!message) return;
+
+    addMessage(message, "user");
+    input.value = "";
+
+    try{
+        const res = await fetch("/chat", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({message})
+        });
+
+        const data = await res.json();
+        addMessage(data.reply, "bot");
+
+    }catch(err){
+        addMessage("Server error", "bot");
+    }
+}
+
+// ---------------- ENTER KEY ----------------
+input.addEventListener("keypress", function(e){
+    if(e.key === "Enter"){
+        sendMessage();
+    }
+});
+
+// ---------------- JARVIS MODE COMMAND FILTER ----------------
+// Only activates for important commands
+function handleJarvisCommand(text){
+    const t = text.toLowerCase();
+
+    if(t.includes("check market") || t.includes("btc")){
+        getTrade();
+        return true;
+    }
+
+    if(t.includes("show reminders")){
+        sendMessage();
+        return true;
+    }
+
+    return false;
+}
+
 // ---------------- TRADING ----------------
 async function getTrade(){
-    const tradeResult = document.getElementById("trade-result");
-
     tradeResult.innerText = "Checking market...";
 
     try{
         const res = await fetch("/ror-trade");
         const data = await res.json();
 
-        let html = "";
+        let text = "";
 
         if(data.error){
-            html = "❌ Error: " + data.error;
+            text = "❌ Error: " + data.error;
         }
         else if(!data.price){
-            html = "⚠ No market data";
+            text = "⚠ No market data";
         }
         else{
-            html = `
-<b>Price:</b> $${data.price}
-<b>Decision:</b> ${data.analysis?.decision || "N/A"}
-<b>Confidence:</b> ${data.analysis?.confidence || "0"}%
-<b>Reason:</b> ${data.analysis?.reason || "No reason"}
-            `;
+            text =
+`Price: $${data.price}
+Decision: ${data.analysis?.decision || "N/A"}
+Confidence: ${data.analysis?.confidence || "0"}%
+Reason: ${data.analysis?.reason || "No reason"}`;
         }
 
-        tradeResult.innerText = html;
+        tradeResult.innerText = text;
 
     }catch(err){
         tradeResult.innerText = "Error fetching market";
     }
 }
 
-// ---------------- BUTTON BIND ----------------
-document.addEventListener("DOMContentLoaded", () => {
-    const btn = document.getElementById("trade-btn");
+// ---------------- BUTTON FIX ----------------
+if(tradeBtn){
+    tradeBtn.addEventListener("click", getTrade);
+}
 
-    if(btn){
-        btn.addEventListener("click", getTrade);
-    }
+// ---------------- AUTO BTC REFRESH ----------------
+setInterval(async ()=>{
+    try{
+        const res = await fetch("/ror-trade");
+        const data = await res.json();
 
-    console.log("JS READY ✅");
-});
+        if(!data.price) return;
+
+        tradeResult.innerText =
+`LIVE BTC: $${data.price}
+Decision: ${data.analysis?.decision || "N/A"}
+Confidence: ${data.analysis?.confidence || "0"}%`;
+
+    }catch(e){}
+}, 15000);
 
 // ---------------- REMINDER CHECK ----------------
 setInterval(async ()=>{
@@ -95,8 +130,57 @@ setInterval(async ()=>{
 
         if(data.reminder){
             addMessage("⏰ Reminder: " + data.reminder, "bot");
-            alert("Reminder: " + data.reminder);
+
+            // Notification only (no voice)
+            if("Notification" in window && Notification.permission === "granted"){
+                new Notification("ROR Reminder", {
+                    body: data.reminder,
+                    icon: "/static/ror-logo.png"
+                });
+            }
         }
 
     }catch(err){}
 }, 15000);
+
+// ---------------- MIC (MANUAL ONLY) ----------------
+micBtn.onclick = ()=>{
+    if(!("webkitSpeechRecognition" in window)) return;
+
+    const recognition = new webkitSpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.start();
+
+    recognition.onresult = (e)=>{
+        const transcript = e.results[0][0].transcript;
+
+        addMessage(transcript, "user");
+
+        // Jarvis smart routing
+        const handled = handleJarvisCommand(transcript);
+
+        if(!handled){
+            sendToBackend(transcript);
+        }
+    };
+};
+
+// ---------------- BACKEND SEND ----------------
+async function sendToBackend(text){
+    try{
+        const res = await fetch("/chat", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({message:text})
+        });
+
+        const data = await res.json();
+        addMessage(data.reply, "bot");
+
+    }catch(err){
+        addMessage("Server error", "bot");
+    }
+}
