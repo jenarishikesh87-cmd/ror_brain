@@ -46,7 +46,7 @@ position:absolute;
 top:0;
 left:0;
 right:0;
-bottom:140px;
+bottom:200px; /* increased for trading box */
 overflow-y:auto;
 padding:20px 15px 0 15px;
 display:flex;
@@ -74,6 +74,29 @@ margin-bottom:12px;
 .user-meta{text-align:right;align-self:flex-end;}
 .bot-meta{text-align:left;align-self:flex-start;}
 
+/* TRADING */
+#trading-box{
+padding:10px 15px;
+}
+
+#trade-btn{
+width:100%;
+padding:12px;
+border:none;
+border-radius:25px;
+background:#ff3b00;
+color:#fff;
+font-size:14px;
+cursor:pointer;
+}
+
+#trade-result{
+margin-top:10px;
+font-size:13px;
+color:#aaa;
+white-space:pre-line;
+}
+
 /* MIC PANEL */
 .mic-panel{
 position:fixed;
@@ -85,13 +108,11 @@ justify-content:center;
 align-items:center;
 }
 
-/* BLOB */
 .blob{
 position:absolute;
 width:160px;
 height:160px;
 z-index:1;
-transition:.3s ease;
 }
 
 .mic{
@@ -105,7 +126,6 @@ align-items:center;
 box-shadow:0 0 18px #ff0000;
 cursor:pointer;
 z-index:2;
-transition:.3s ease;
 }
 
 /* KEYBOARD */
@@ -139,7 +159,7 @@ color:#fff;
 cursor:pointer;
 }
 
-/* TOGGLE TAB */
+/* TOGGLE */
 .toggle-tab{
 position:fixed;
 top:20px;
@@ -152,7 +172,6 @@ z-index:500;
 cursor:pointer;
 }
 
-/* TOGGLE DRAWER */
 .toggle-drawer{
 position:fixed;
 top:20px;
@@ -168,9 +187,7 @@ transition:.3s ease;
 z-index:499;
 }
 
-.toggle-drawer.open{
-right:0;
-}
+.toggle-drawer.open{right:0;}
 
 .toggle-drawer button{
 background:none;
@@ -194,6 +211,12 @@ cursor:pointer;
 </div>
 
 <div class="chat" id="chat"></div>
+
+<!-- ✅ TRADING UI -->
+<div id="trading-box">
+<button id="trade-btn">📊 Check Market</button>
+<div id="trade-result"></div>
+</div>
 
 <div class="mic-panel" id="micPanel">
 <canvas class="blob" id="blobCanvas"></canvas>
@@ -223,6 +246,9 @@ const toggleDrawer=document.getElementById("toggleDrawer");
 const micPanel=document.getElementById("micPanel");
 const keyboard=document.getElementById("keyboard");
 
+const tradeBtn=document.getElementById("trade-btn");
+const tradeResult=document.getElementById("trade-result");
+
 canvas.width=160;
 canvas.height=160;
 
@@ -244,7 +270,7 @@ keyboard.style.display="flex";
 toggleDrawer.classList.remove("open");
 }
 
-/* MESSAGES */
+/* CHAT */
 function addMessage(text,type){
 const bubble=document.createElement("div");
 bubble.className="bubble "+type;
@@ -277,30 +303,43 @@ const data=await res.json();
 addMessage(data.reply,"bot");
 }
 
-/* REMINDER CHECKER */
-setInterval(async ()=>{
-const res = await fetch("/check-reminder");
-const data = await res.json();
-if(data.reminder){
-addMessage("🔔 Reminder: " + data.reminder, "bot");
-alert("Reminder: " + data.reminder);
+/* TRADING */
+tradeBtn.onclick=async()=>{
+tradeResult.innerText="Checking market...";
+
+try{
+const res=await fetch("/ror-trade");
+const data=await res.json();
+
+tradeResult.innerText=
+"Price: $"+data.price+
+"\nDecision: "+data.decision+
+"\nConfidence: "+data.confidence+"%"+
+"\nReason: "+data.reason;
+
+}catch{
+tradeResult.innerText="Error fetching market";
 }
-},15000);
+};
 
 /* BLOB */
 function drawBlob(){
 ctx.clearRect(0,0,160,160);
 ctx.fillStyle="rgba(255,60,0,0.5)";
 ctx.beginPath();
+
 for(let i=0;i<360;i++){
 let angle=i*Math.PI/180;
 let base=listening?65:58;
 let radius=base+4*Math.sin(angle*2+t)+3*Math.sin(angle*3+t);
+
 let x=80+radius*Math.cos(angle);
 let y=80+radius*Math.sin(angle);
+
 if(i===0)ctx.moveTo(x,y);
 else ctx.lineTo(x,y);
 }
+
 ctx.closePath();
 ctx.fill();
 t+=0.01;
@@ -314,9 +353,6 @@ if(!('webkitSpeechRecognition' in window)) return;
 
 const recognition=new webkitSpeechRecognition();
 recognition.lang="en-IN";
-recognition.continuous=false;
-recognition.interimResults=false;
-
 recognition.start();
 listening=true;
 
@@ -326,20 +362,10 @@ addMessage(transcript,"user");
 sendToBackend(transcript);
 };
 
-recognition.onend=()=>{listening=false;};
-recognition.onerror=()=>{listening=false;};
+recognition.onend=()=>listening=false;
+recognition.onerror=()=>listening=false;
 };
 </script>
 
-  <div id="trading-box" style="padding:20px; color:white;">
-  <h2>📊 ROR Trading</h2>
-
-<button id="trade-btn">Check Market</button>
-
-  <div id="trade-result" style="margin-top:15px;"></div>
-  </div>
-
-  <script src="static/app.js"></script>
-  
 </body>
-</html>
+  </html>
