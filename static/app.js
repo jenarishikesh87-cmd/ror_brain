@@ -26,3 +26,23 @@ function addMessage(text, sender) {
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
       }
+
+async function getTrade() {
+  const res = await fetch("/ror-trade");
+  const data = await res.json();
+
+  let html = "";
+
+  if (data.error) {
+    html = "❌ Error: " + data.error;
+  } else {
+    html = `
+      <p><b>Price:</b> $${data.price}</p>
+      <p><b>Decision:</b> ${data.analysis.decision}</p>
+      <p><b>Confidence:</b> ${data.analysis.confidence}%</p>
+      <p><b>Reason:</b> ${data.analysis.reason}</p>
+    `;
+  }
+
+  document.getElementById("trade-result").innerHTML = html;
+}
