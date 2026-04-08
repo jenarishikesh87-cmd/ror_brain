@@ -230,26 +230,30 @@ import requests
 @app.route("/ror-trade", methods=["GET"])
 def ror_trade():
     try:
-        # Get price
         url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
         res = requests.get(url).json()
+
+        # Check if response is valid
+        if "bitcoin" not in res:
+            return {
+                "status": "error",
+                "api_response": res
+            }
+
         price = res["bitcoin"]["usd"]
 
-        # Create prompt for ROR
+        # ROR thinking
         prompt = f"""
         You are ROR, an intelligent trading assistant.
 
         Current BTC price: {price}
 
-        Based on this, decide:
-        - BUY, SELL or HOLD
-        - Confidence (0-100)
-        - Reason (short)
-
-        Respond clearly.
+        Decide:
+        BUY / SELL / HOLD
+        Confidence (0-100)
+        Reason
         """
 
-        # Use your existing ROR brain
         decision = ror_brain(prompt)
 
         return {
