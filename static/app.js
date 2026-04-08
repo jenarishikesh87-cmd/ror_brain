@@ -54,3 +54,28 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", getTrade);
   }
 });
+console.log("JS LOADED ✅");
+
+window.getTrade = async function () {
+  console.log("BUTTON CLICKED ✅");
+
+  const res = await fetch("/ror-trade");
+  const data = await res.json();
+
+  let html = "";
+
+  if (data.error) {
+    html = "❌ Error: " + data.error;
+  } else if (!data.price) {
+    html = "⚠️ No market data";
+  } else {
+    html = `
+      <p><b>Price:</b> $${data.price}</p>
+      <p><b>Decision:</b> ${data.analysis?.decision || "N/A"}</p>
+      <p><b>Confidence:</b> ${data.analysis?.confidence || "0"}%</p>
+      <p><b>Reason:</b> ${data.analysis?.reason || "No reason"}</p>
+    `;
+  }
+
+  document.getElementById("trade-result").innerHTML = html;
+};
