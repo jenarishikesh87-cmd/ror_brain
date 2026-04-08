@@ -283,6 +283,13 @@ def ror_trade():
 
     except Exception as e:
         return {"error": str(e)}
+#----------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("trade-btn");
+  if (btn) {
+    btn.addEventListener("click", getTrade);
+  }
+});
 # ---------------- START ----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
