@@ -230,23 +230,14 @@ import requests
 @app.route("/ror-trade", methods=["GET"])
 def ror_trade():
     try:
-        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
         res = requests.get(url).json()
 
-        # Debug print (optional)
-        print(res)
-
-        if "price" not in res:
-            return {
-                "status": "error",
-                "api_response": res
-            }
-
-        price = float(res["price"])
+        price = res["bitcoin"]["usd"]
 
         return {
             "status": "live",
-            "symbol": "BTC/USDT",
+            "symbol": "BTC/USD",
             "price": price
         }
 
