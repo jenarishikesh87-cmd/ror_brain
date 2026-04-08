@@ -4,25 +4,39 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ROR</title>
 
+<!-- PWA -->
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#ff004c">
+
+<!-- iOS Support -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<!-- Styles -->
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body>
 
+<!-- LOGO -->
 <img src="{{ url_for('static', filename='ror-logo.png') }}" class="logo" id="logo">
 
+<!-- CHAT -->
 <div class="chat" id="chat"></div>
 
+<!-- TRADING -->
 <div id="trading-box">
-<button id="trade-btn">📊 Check Market</button>
-<div id="trade-result"></div>
+  <button id="trade-btn">📊 Check Market</button>
+  <div id="trade-result"></div>
 </div>
 
+<!-- MIC -->
 <div class="mic" id="micBtn"></div>
 
+<!-- KEYBOARD -->
 <div class="keyboard">
-<input type="text" id="input">
-<button onclick="sendMessage()">Send</button>
+  <input type="text" id="input" placeholder="Talk to ROR...">
+  <button class="send" onclick="sendMessage()">Send</button>
 </div>
 
 <!-- MODULES -->
@@ -33,6 +47,22 @@
 
 <!-- MAIN -->
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+
+<!-- 🔥 SERVICE WORKER + PUSH -->
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/static/sw.js")
+    .then(reg => console.log("SW Registered"))
+    .catch(err => console.log("SW Error", err));
+}
+
+// 🔔 REQUEST NOTIFICATION PERMISSION
+if ("Notification" in window) {
+  Notification.requestPermission().then(permission => {
+    console.log("Notification:", permission);
+  });
+}
+</script>
 
 </body>
 </html>
