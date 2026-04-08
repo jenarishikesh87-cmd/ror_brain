@@ -1,24 +1,69 @@
-let tradeBtn, tradeResult;
+// ================= TRADE MODULE =================
+
+let currentAsset = "bitcoin"; // default
 
 function initTrade(){
-    tradeBtn = document.getElementById("trade-btn");
-    tradeResult = document.getElementById("trade-result");
+
+    const tradeBtn = document.getElementById("trade-btn");
+    const tradeResult = document.getElementById("trade-result");
+
+    // Asset buttons (optional if you add UI later)
+    window.setAsset = function(asset){
+        currentAsset = asset;
+        getTrade();
+    }
 
     tradeBtn.addEventListener("click", getTrade);
 
-    // AUTO REFRESH
-    setInterval(getTrade,15000);
-}
+    // Auto refresh
+    setInterval(getTrade, 15000);
 
-async function getTrade(){
-    tradeResult.innerText="Checking market...";
+    async function getTrade(){
+        tradeResult.innerHTML = "Loading...";
 
-    const res=await fetch("/ror-trade");
-    const data=await res.json();
+        try{
+            const res = await fetch(`/ror-trade/${currentAsset}`);
+            const data = await res.json();
 
-    tradeResult.innerText=
-`Price: $${data.price}
-Decision: ${data.analysis?.decision}
-Confidence: ${data.analysis?.confidence}%
-Reason: ${data.analysis?.reason}`;
+            const a = data.analysis;
+
+            tradeResult.innerHTML = `
+<div class="card">
+
+<div class="row">
+  <span>Session</span>
+  <b>${a.session}</b>
+</div>
+
+<div class="price">$${data.price}</div>
+
+<div class="decision ${a.decision}">
+  ${a.decision}
+</div>
+
+<div class="confidence">
+  Confidence: ${a.confidence}%
+</div>
+
+<div class="levels">
+  <div>Entry: ${a.entry}</div>
+  <div>TP: ${a.tp}</div>
+  <div>SL: ${a.sl}</div>
+</div>
+
+<div class="signals">
+  ${a.signals.join(" • ")}
+</div>
+
+<div class="reason">
+  ${a.reason}
+</div>
+
+</div>
+            `;
+
+        }catch(e){
+            tradeResult.innerHTML = "Error loading market";
+        }
+    }
 }
